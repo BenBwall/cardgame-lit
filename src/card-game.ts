@@ -35,7 +35,7 @@ export class CardGame extends LitElement {
   private message = "Draw a card to begin.";
   private confirmingReset = false;
   private handLayout: "fan" | "grid" = "fan";
-  private flipAxis: "X" | "Y" = "Y";
+  private flipAxis: "X" | "Y" = "X";
   private handWidth = 600;
   private resizeObserver?: ResizeObserver;
   private cardMotion = new CardMotion(
@@ -236,17 +236,6 @@ export class CardGame extends LitElement {
     return html`<div class="layout-switch" role="group" aria-label="Draw flip direction">
       <button
         type="button"
-        aria-label="Vertical flip"
-        aria-pressed=${this.flipAxis === "Y"}
-        @click=${() => {
-          this.flipAxis = "Y";
-        }}
-      >
-        ${unsafeHTML(buildLucideSvg(FoldHorizontal, { hasA11yProp: false }))}
-        <span class="layout-tooltip" role="tooltip">Flip around vertical axis</span>
-      </button>
-      <button
-        type="button"
         aria-label="Horizontal flip"
         aria-pressed=${this.flipAxis === "X"}
         @click=${() => {
@@ -255,6 +244,17 @@ export class CardGame extends LitElement {
       >
         ${unsafeHTML(buildLucideSvg(FoldVertical, { hasA11yProp: false }))}
         <span class="layout-tooltip" role="tooltip">Flip around horizontal axis</span>
+      </button>
+      <button
+        type="button"
+        aria-label="Vertical flip"
+        aria-pressed=${this.flipAxis === "Y"}
+        @click=${() => {
+          this.flipAxis = "Y";
+        }}
+      >
+        ${unsafeHTML(buildLucideSvg(FoldHorizontal, { hasA11yProp: false }))}
+        <span class="layout-tooltip" role="tooltip">Flip around vertical axis</span>
       </button>
     </div>`;
   }

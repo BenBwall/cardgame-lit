@@ -50,7 +50,7 @@ export class CardMotion {
 
   constructor(
     private readonly root: () => DocumentFragment | HTMLElement,
-    private readonly drawFlipAxis: () => FlipAxis = () => "Y",
+    private readonly drawFlipAxis: () => FlipAxis = () => "X",
   ) {}
 
   connect(): void {

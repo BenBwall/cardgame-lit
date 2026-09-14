@@ -7,7 +7,12 @@ for (const [label, axis] of [
   test(`${label} draw flips show the back, turn edge-on, and land face up`, async ({ page }) => {
     await page.goto("/");
     const control = page.getByRole("button", { name: `${label} flip`, exact: true });
-    if (axis === "Y") await expect(control).toHaveAttribute("aria-pressed", "true");
+    if (axis === "X") {
+      await expect(control).toHaveAttribute("aria-pressed", "true");
+      await expect(
+        page.getByRole("group", { name: "Draw flip direction" }).getByRole("button").first(),
+      ).toHaveAccessibleName("Horizontal flip");
+    }
     await control.click();
     await expect(control).toHaveAttribute("aria-pressed", "true");
     await control.hover();
