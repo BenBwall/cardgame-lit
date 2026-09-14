@@ -16,9 +16,11 @@
   "scripts": {
     "build": "tsc && bun scripts/build-demo.ts",
     "check": "tsc --noEmit",
-    "test": "bun test tests"
+    "test": "bun test tests",
+    "test:browser": "bun run build && playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "lit": "^3.3.3",
     "typescript": "^6.0.3"
   },

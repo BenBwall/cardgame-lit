@@ -1,7 +1,7 @@
 export const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"] as const;
 export const SUITS = ["Clubs", "Diamonds", "Hearts", "Spades"] as const;
 export type Card = Readonly<{ rank: (typeof RANKS)[number]; suit: (typeof SUITS)[number] }>;
-export type SortOrder = "draw-order" | "rank-then-suit" | "suit-then-rank";
+export type SortOrder = "draw-order" | "rank-then-suit" | "suit-then-rank" | "manual";
 export const SUIT_SYMBOLS = { Clubs: "♣", Diamonds: "♦", Hearts: "♥", Spades: "♠" } as const;
 const suitOrder: Card["suit"][] = ["Hearts", "Diamonds", "Spades", "Clubs"];
 
@@ -20,7 +20,7 @@ export const shuffle = (cards: readonly Card[], random = Math.random): Card[] =>
 };
 
 export const sortCards = (cards: readonly Card[], order: SortOrder): Card[] => {
-  if (order === "draw-order") return [...cards];
+  if (order === "draw-order" || order === "manual") return [...cards];
   return [...cards].sort((a, b) => {
     const rank = RANKS.indexOf(a.rank) - RANKS.indexOf(b.rank);
     const suit = suitOrder.indexOf(a.suit) - suitOrder.indexOf(b.suit);

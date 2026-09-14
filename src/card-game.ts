@@ -1,6 +1,14 @@
 import { LitElement, css, html, nothing } from "lit";
-import { type Card, type SortOrder, SUIT_SYMBOLS, cardId, cardName, sortCards } from "./cards.js";
-import { type GameState, drawCard, newGame, playCard } from "./game-state.js";
+import { type Card, type SortOrder, SUIT_SYMBOLS, cardId, cardName } from "./cards.js";
+import {
+  type GameState,
+  drawCard,
+  handCards,
+  newGame,
+  playCard,
+  reorderHand,
+} from "./game-state.js";
+import { HandDrag } from "./hand-drag.js";
 
 /** Import this module once, then use <card-game> anywhere on a static page. */
 export class CardGame extends LitElement {
@@ -13,10 +21,13 @@ export class CardGame extends LitElement {
   };
 
   private game: GameState | undefined;
-  private history: GameState[] = [];
+  private history: { game: GameState; sortOrder: SortOrder }[] = [];
   private sortOrder: SortOrder = "draw-order";
   private message = "Draw a card to begin.";
   private confirmingReset = false;
+  private handDrag = new HandDrag((id, destination) => {
+    void this.reorder(id, destination);
+  });
 
   // Randomness belongs to a browser instance, never the static build or shared state.
   connectedCallback(): void {
@@ -24,9 +35,15 @@ export class CardGame extends LitElement {
     this.game ??= newGame();
   }
 
+  disconnectedCallback(): void {
+    this.handDrag.cancel();
+    super.disconnectedCallback();
+  }
+
   private move(next: GameState, message: string): void {
     if (!this.game || next === this.game) return;
-    this.history = [...this.history, this.game];
+    this.handDrag.cancel();
+    this.history = [...this.history, { game: this.game, sortOrder: this.sortOrder }];
     this.game = next;
     this.confirmingReset = false;
     this.message =
@@ -44,7 +61,7 @@ export class CardGame extends LitElement {
 
   private async play(card: Card): Promise<void> {
     if (!this.game) return;
-    const hand = sortCards(this.game.hand, this.sortOrder);
+    const hand = handCards(this.game, this.sortOrder);
     const index = hand.findIndex((value) => cardId(value) === cardId(card));
     this.move(playCard(this.game, cardId(card)), `Played ${cardName(card)}.`);
     await this.updateComplete;
@@ -59,19 +76,62 @@ export class CardGame extends LitElement {
   private undo(): void {
     const previous = this.history.at(-1);
     if (!previous) return;
-    this.game = previous;
+    this.handDrag.cancel();
+    this.game = previous.game;
+    this.sortOrder = previous.sortOrder;
     this.history = this.history.slice(0, -1);
     this.confirmingReset = false;
     this.message = "Last move undone.";
   }
 
   private async reset(): Promise<void> {
+    this.handDrag.cancel();
     this.game = newGame();
+    this.sortOrder = "draw-order";
     this.history = [];
     this.confirmingReset = false;
     this.message = "New deck shuffled. Draw a card to begin.";
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLButtonElement>("#draw-card")?.focus();
+  }
+
+  private async reorder(id: string, destination: number): Promise<void> {
+    if (!this.game) return;
+    const card = this.game.hand.find((card) => cardId(card) === id);
+    const next = reorderHand(this.game, id, destination, this.sortOrder);
+    if (!card || next === this.game) return;
+    this.move(
+      next,
+      `Moved ${cardName(card)} to position ${destination + 1} of ${next.hand.length}.`,
+    );
+    this.sortOrder = "manual";
+    await this.updateComplete;
+    this.renderRoot
+      .querySelector<HTMLButtonElement>(`[data-card-id="${id}"]`)
+      ?.focus({ preventScroll: true });
+  }
+
+  private reorderKey(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      this.handDrag.cancel();
+      return;
+    }
+    if (!event.altKey || !this.game) return;
+    const source = (event.target as Element).closest<HTMLButtonElement>("[data-card-id]");
+    const id = source?.dataset.cardId;
+    if (!id) return;
+    const hand = handCards(this.game, this.sortOrder);
+    const index = hand.findIndex((card) => cardId(card) === id);
+    const destinations: Record<string, number> = {
+      ArrowLeft: index - 1,
+      ArrowRight: index + 1,
+      Home: 0,
+      End: hand.length - 1,
+    };
+    const destination = destinations[event.key];
+    if (destination === undefined) return;
+    event.preventDefault();
+    void this.reorder(id, destination);
   }
 
   private cardFace(card: Card) {
@@ -155,26 +215,45 @@ export class CardGame extends LitElement {
             aria-label="Sort"
             .value=${this.sortOrder}
             @change=${(event: Event) => {
+              this.handDrag.cancel();
               this.sortOrder = (event.target as HTMLSelectElement).value as SortOrder;
             }}
           >
             <option value="draw-order">Draw order</option>
+            <option value="manual">Manual order</option>
             <option value="rank-then-suit">Rank, then suit</option>
             <option value="suit-then-rank">Suit, then rank</option>
           </select>
         </label>
       </div>
+      <p class="hand-help" id="hand-help">
+        Drag cards to rearrange them. Click to play. With a card focused, use Alt + Left/Right to
+        move it.
+      </p>
       ${
         hand.length
-          ? html`<ul class="hand" aria-label="Your hand">
-              ${sortCards(hand, this.sortOrder).map(
+          ? html`<ul
+              class="hand"
+              aria-label="Your hand"
+              @pointerdown=${this.handDrag.pointerDown}
+              @pointermove=${this.handDrag.pointerMove}
+              @pointerup=${this.handDrag.pointerUp}
+              @pointercancel=${this.handDrag.pointerCancel}
+              @lostpointercapture=${this.handDrag.pointerCancel}
+              @keydown=${this.reorderKey}
+            >
+              ${handCards(this.game, this.sortOrder).map(
                 (card) => html`<li>
                   <button
                     class="card face"
                     type="button"
                     data-suit=${card.suit}
+                    data-card-id=${cardId(card)}
+                    aria-describedby="hand-help"
                     aria-label=${`Play ${cardName(card)}`}
-                    @click=${() => this.play(card)}
+                    @click=${(event: MouseEvent) => {
+                      if (!this.handDrag.consumeClick(event)) void this.play(card);
+                    }}
                   >
                     ${this.cardFace(card)}
                   </button>
@@ -196,6 +275,11 @@ export class CardGame extends LitElement {
           Draw cards from the deck, then select a card in your hand to play it. Sort your hand, undo
           a move, or start a new shuffled deck at any time. Aces sort low. This is a free-play table
           with no scoring or opponents.
+        </p>
+        <p>
+          Drag a card to the marked position to arrange your hand. Dropping outside your hand or
+          pressing Escape cancels the drag. Manual order keeps your arrangement when drawing more
+          cards. Alt + Home/End moves a focused card to the first/last position.
         </p>
         <p>Your game stays in this tab and resets when you reload the page.</p>
       </details>
@@ -373,10 +457,55 @@ export class CardGame extends LitElement {
     }
     .hand .card {
       transition: transform 120ms ease;
+      position: relative;
+      touch-action: none;
+      user-select: none;
+      cursor: grab;
+    }
+    .hand-help {
+      font-size: 0.875rem;
+      color: var(--color-muted, #506050);
+      line-height: 1.5;
+    }
+    .hand[data-dragging] .card {
+      transform: none;
+      cursor: grabbing;
+    }
+    .hand .card[data-drag-source] {
+      opacity: 0.35;
+    }
+    .card[data-drop-side]::after {
+      content: "";
+      position: absolute;
+      width: 3px;
+      top: -0.25rem;
+      bottom: -0.25rem;
+      z-index: 101;
+      background: var(--color-primary, #386541);
+      border-radius: 2px;
+    }
+    .card[data-drop-side="before"]::after {
+      left: -0.45rem;
+    }
+    .card[data-drop-side="after"]::after {
+      right: -0.45rem;
+    }
+    .drag-preview {
+      position: fixed;
+      z-index: 100;
+      pointer-events: none;
+      margin: 0;
+      box-shadow: 0 0.5rem 1.5rem #0004;
+      transform: rotate(4deg);
+      cursor: grabbing;
     }
     .hand .card:hover,
     .hand .card:focus-visible {
       transform: translateY(-0.25rem);
+    }
+    .hand[data-dragging] .card:hover,
+    .hand[data-dragging] .card:focus-visible {
+      transform: none;
     }
     .empty-hand {
       padding-block: 1rem;

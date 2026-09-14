@@ -1,8 +1,48 @@
 import { describe, expect, test } from "bun:test";
 import { cardId, createDeck, shuffle, sortCards } from "../src/cards.js";
-import { drawCard, newGame, playCard } from "../src/game-state.js";
+import { drawCard, handCards, newGame, playCard, reorderHand } from "../src/game-state.js";
 
 describe("local card table", () => {
+  test("reordering preserves every card, immutable snapshots, and original draw order", () => {
+    let state = newGame();
+    for (let index = 0; index < 5; index++) state = drawCard(state);
+    const ids = state.hand.map(cardId);
+    const reordered = reorderHand(state, ids[0], 4, "draw-order");
+    expect(handCards(reordered, "manual").map(cardId)).toEqual([...ids.slice(1), ids[0]]);
+    expect(reordered.deck).toBe(state.deck);
+    expect(reordered.played).toBe(state.played);
+    expect(reordered.hand).toBe(state.hand);
+    expect(state.handOrder).toEqual(ids);
+    expect(handCards(reordered, "draw-order").map(cardId)).toEqual(ids);
+    expect(reorderHand(reordered, ids[0], 0, "manual").handOrder).toEqual(ids);
+  });
+
+  test("a drag starts from the displayed sort and manual order survives draw and play", () => {
+    let state = newGame();
+    for (let index = 0; index < 5; index++) state = drawCard(state);
+    const sorted = handCards(state, "rank-then-suit").map(cardId);
+    const reordered = reorderHand(state, sorted[0], 4, "rank-then-suit");
+    const drawn = drawCard(reordered);
+    expect(handCards(drawn, "manual").map(cardId)).toEqual([
+      ...sorted.slice(1),
+      sorted[0],
+      cardId(drawn.hand[5]),
+    ]);
+    const played = playCard(drawn, sorted[2]);
+    expect(played.handOrder).toEqual(drawn.handOrder.filter((id) => id !== sorted[2]));
+    expect(new Set([...played.deck, ...played.hand, ...played.played].map(cardId)).size).toBe(52);
+    expect(played.handOrder).toHaveLength(played.hand.length);
+  });
+
+  test("invalid and no-op drops do not change state or create history entries", () => {
+    const state = drawCard(newGame());
+    const id = cardId(state.hand[0]);
+    for (const destination of [-1, 1, 0.5, NaN, Infinity, 0])
+      expect(reorderHand(state, id, destination, "draw-order")).toBe(state);
+    expect(reorderHand(state, "unknown", 0, "manual")).toBe(state);
+    expect(reorderHand(newGame(), id, 0, "manual").hand).toEqual([]);
+  });
+
   test("starts with 52 unique cards and no shared instance state", () => {
     const first = newGame();
     const second = newGame();

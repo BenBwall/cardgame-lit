@@ -13,9 +13,18 @@ bun install --frozen-lockfile
 bun run check
 bun test
 bun run build
+bun run test:browser
 ```
 
 The build emits reusable ES modules and declarations in `dist/`, and a self-contained static demo in `demo/`. Serve `demo/` with any static file host. No runtime server is required.
+
+Browser tests use Microsoft Edge and a local test server, and cover mouse and touch drags, wrapped rows, keyboard reordering, undo, cancellation, and click/tap-to-play.
+
+## Arrange your hand
+
+Drag a card to the marked insertion point to reorder your hand with a mouse, touch, or pen. The hand switches to **Manual order**; drawing adds cards at the end of your arrangement. Selecting **Draw order** restores the original draw sequence, and you can switch back to your manual arrangement. **Undo** restores the previous arrangement and sort selection. Drop outside the hand or press Escape to cancel.
+
+Click or tap a card to play it. For keyboard reordering, focus a card and use **Alt + Left/Right**, or **Alt + Home/End** to move it to the first/last position. Enter and Space still play the focused card.
 
 ## Embed
 
