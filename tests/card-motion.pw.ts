@@ -8,7 +8,7 @@ const draw = async (page: Page, count = 1) => {
   for (let i = 0; i < count; i++) await page.getByRole("button", { name: "Draw a card" }).click();
 };
 
-test("a draw flies from the deck, rotates in transit, and lands without duplicate faces", async ({
+test("a draw starts face down, flips vertically without spinning, and lands face up", async ({
   page,
 }) => {
   await draw(page);
@@ -18,17 +18,32 @@ test("a draw flies from the deck, rotates in transit, and lands without duplicat
   const target = (await hand(page).first().boundingBox())!;
   const samples = await flight.evaluate((node) => {
     const animation = node.getAnimations()[0];
+    const flipper = node.querySelector<HTMLElement>(".flight-flipper")!;
+    const flip = flipper.getAnimations()[0];
     animation.pause();
+    flip.pause();
     const duration = Number(animation.effect!.getTiming().duration);
     return [0, duration / 2, duration].map((time) => {
       animation.currentTime = time;
+      flip.currentTime = time;
       const m = new DOMMatrix(getComputedStyle(node).transform);
-      return { x: m.e, y: m.f, angle: (Math.atan2(m.b, m.a) * 180) / Math.PI };
+      const facing = new DOMMatrix(getComputedStyle(flipper).transform);
+      return {
+        x: m.e,
+        y: m.f,
+        angle: (Math.atan2(m.b, m.a) * 180) / Math.PI,
+        faceDirection: facing.m11,
+      };
     });
   });
   expect(samples[0].x).toBeCloseTo(deck.x, 0);
   expect(samples[0].y).toBeCloseTo(deck.y, 0);
-  expect(Math.abs(samples[1].angle)).toBeGreaterThan(2);
+  expect(samples[0].faceDirection).toBeCloseTo(-1);
+  expect(samples[1].faceDirection).toBeCloseTo(0);
+  expect(samples[2].faceDirection).toBeCloseTo(1);
+  for (const sample of samples) expect(sample.angle).toBeCloseTo(0);
+  await expect(flight.locator(".flight-front")).toHaveCSS("backface-visibility", "hidden");
+  await expect(flight.locator(".flight-back")).toHaveCSS("backface-visibility", "hidden");
   expect(samples[1].y).toBeGreaterThan(deck.y);
   expect(samples[1].y).toBeLessThan(target.y);
   expect(samples[2].x).toBeCloseTo(target.x, 0);
@@ -38,6 +53,34 @@ test("a draw flies from the deck, rotates in transit, and lands without duplicat
   await flight.evaluate((node) => node.getAnimations()[0].finish());
   await settled(page);
   await expect(hand(page).first()).toHaveCSS("opacity", "1");
+});
+
+test("undo continues an interrupted flip and returns the card face down", async ({ page }) => {
+  await draw(page);
+  const facing = await flights(page).evaluate((node) => {
+    const flipper = node.querySelector<HTMLElement>(".flight-flipper")!;
+    for (const animation of [...node.getAnimations(), ...flipper.getAnimations()]) {
+      animation.pause();
+      animation.currentTime = 200;
+    }
+    return new DOMMatrix(getComputedStyle(flipper).transform).m11;
+  });
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  const returning = page.locator('[data-flight-kind="return-deck"]');
+  const samples = await returning.evaluate((node) => {
+    const flipper = node.querySelector<HTMLElement>(".flight-flipper")!;
+    const animation = flipper.getAnimations()[0];
+    animation.pause();
+    return [0, Number(animation.effect!.getTiming().duration)].map((time) => {
+      animation.currentTime = time;
+      return new DOMMatrix(getComputedStyle(flipper).transform).m11;
+    });
+  });
+  expect(samples[0]).toBeCloseTo(facing, 3);
+  expect(samples[1]).toBeCloseTo(-1);
+  await returning.evaluate((node) => node.getAnimations()[0].finish());
+  await settled(page);
+  await expect(hand(page)).toHaveCount(0);
 });
 
 test("an invalid drop flies back from its dragged angle without changing hand order or history", async ({

@@ -550,6 +550,34 @@ export class CardGame extends LitElement {
     .card[data-in-flight] {
       opacity: 0;
     }
+    .card-flight.flipping {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      perspective: 600px;
+    }
+    .flight-flipper {
+      display: block;
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+    }
+    .flight-front,
+    .flight-back {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      backface-visibility: hidden;
+      box-shadow: 0 0.5rem 1.5rem #0004;
+    }
+    .flight-back {
+      display: grid;
+      place-items: center;
+      transform: rotateY(180deg);
+    }
     .hand .card:hover,
     .hand .card:focus-visible {
       transform: translateY(-0.25rem);

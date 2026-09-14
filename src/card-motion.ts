@@ -11,6 +11,7 @@ type Pose = {
   angle: number;
   origin: string;
   flying?: boolean;
+  flip?: number;
 };
 type Snapshot = {
   version: number;
@@ -62,6 +63,8 @@ export class CardMotion {
     const rect = node.getBoundingClientRect();
     const style = getComputedStyle(node);
     const matrix = new DOMMatrix(style.transform);
+    const flipper = flying ? node.querySelector<HTMLElement>(".flight-flipper") : null;
+    const flipMatrix = flipper ? new DOMMatrix(getComputedStyle(flipper).transform) : undefined;
     return {
       node: node.cloneNode(true) as HTMLElement,
       x: flying ? matrix.e : rect.left,
@@ -71,6 +74,7 @@ export class CardMotion {
       angle: flying ? (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI : 0,
       origin: flying ? style.transformOrigin : "50% 50%",
       flying,
+      flip: flipMatrix ? (Math.atan2(-flipMatrix.m13, flipMatrix.m11) * 180) / Math.PI : undefined,
     };
   }
 
@@ -122,7 +126,12 @@ export class CardMotion {
       if (!from) {
         const pile = previousZone === "played" ? before.played : before.deck;
         if (!pile) continue;
-        from = { ...pile, node: to.node, angle: previousZone === "deck" ? -160 : 0 };
+        from = {
+          ...pile,
+          node: to.node,
+          angle: 0,
+          flip: previousZone === "deck" ? 180 : undefined,
+        };
       }
       if (!target && previousZone === zone) continue;
       const changedZone = previousZone !== zone;
@@ -181,8 +190,12 @@ export class CardMotion {
     node.style.cssText = `width:${from.width}px;height:${from.height}px;transform-origin:${from.origin};`;
     this.root().appendChild(node);
     target?.setAttribute("data-in-flight", "");
-    const endAngle = kind === "return-deck" ? 160 : 0;
+    const endAngle = 0;
     const duration = kind === "draw" ? 600 : kind === "arrange" ? 280 : 420;
+    const flip =
+      kind === "draw" || kind === "return-deck" || from.flip !== undefined
+        ? this.flip(node, from.flip ?? 0, kind === "return-deck" ? 180 : 0, duration)
+        : undefined;
     const arc = kind === "draw" ? 45 : kind === "arrange" ? 8 : 24;
     const animation = node.animate(
       [
@@ -205,8 +218,31 @@ export class CardMotion {
       target?.removeAttribute("data-in-flight");
       node.remove();
       animation.cancel();
+      flip?.cancel();
     };
     this.flights.set(id, { node, stop });
     void animation.finished.then(stop, stop);
+  }
+
+  private flip(node: HTMLElement, from: number, to: number, duration: number): Animation {
+    const face = node.querySelector(".flight-front") ?? node;
+    const front = document.createElement("span");
+    front.className = "card face flight-front";
+    front.dataset.suit = node.dataset.suit;
+    front.append(...[...face.childNodes].map((child) => child.cloneNode(true)));
+    const back = document.createElement("span");
+    back.className = "card back flight-back";
+    back.textContent = "✦";
+    const flipper = document.createElement("span");
+    flipper.className = "flight-flipper";
+    flipper.append(front, back);
+    node.replaceChildren(flipper);
+    node.classList.add("flipping");
+    const animation = flipper.animate(
+      [{ transform: `rotateY(${from}deg)` }, { transform: `rotateY(${to}deg)` }],
+      { duration, easing: "ease-in-out", fill: "both" },
+    );
+    void animation.finished.catch(() => {});
+    return animation;
   }
 }
