@@ -12,6 +12,7 @@ type Pose = {
   origin: string;
   flying?: boolean;
   flip?: number;
+  shadow: string;
 };
 type Snapshot = {
   version: number;
@@ -69,12 +70,14 @@ export class CardMotion {
       node: node.cloneNode(true) as HTMLElement,
       x: flying ? matrix.e : rect.left,
       y: flying ? matrix.f : rect.top,
-      width: flying ? node.offsetWidth : rect.width,
-      height: flying ? node.offsetHeight : rect.height,
+      // offsetWidth/Height round away subpixels each time a flight is interrupted.
+      width: flying ? parseFloat(style.width) : rect.width,
+      height: flying ? parseFloat(style.height) : rect.height,
       angle: flying ? (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI : 0,
       origin: flying ? style.transformOrigin : "50% 50%",
       flying,
       flip: flipMatrix ? (Math.atan2(-flipMatrix.m13, flipMatrix.m11) * 180) / Math.PI : undefined,
+      shadow: getComputedStyle(node.querySelector(".flight-front") ?? node).boxShadow,
     };
   }
 
@@ -212,6 +215,18 @@ export class CardMotion {
       ],
       { duration, easing: "cubic-bezier(.2,.7,.25,1)", fill: "both" },
     );
+    const surfaces = flip
+      ? [...node.querySelectorAll<HTMLElement>(".flight-front, .flight-back")]
+      : [node];
+    const shadows = surfaces.map((surface) => {
+      const shadow = from.flying ? from.shadow : getComputedStyle(surface).boxShadow;
+      const animation = surface.animate(
+        [{ boxShadow: shadow }, { boxShadow: shadow, offset: 0.65 }, { boxShadow: to.shadow }],
+        { duration, easing: "ease-in-out", fill: "both" },
+      );
+      void animation.finished.catch(() => {});
+      return animation;
+    });
     const stop = () => {
       if (this.flights.get(id)?.node !== node) return;
       this.flights.delete(id);
@@ -219,6 +234,7 @@ export class CardMotion {
       node.remove();
       animation.cancel();
       flip?.cancel();
+      for (const shadow of shadows) shadow.cancel();
     };
     this.flights.set(id, { node, stop });
     void animation.finished.then(stop, stop);

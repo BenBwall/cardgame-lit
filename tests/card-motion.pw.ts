@@ -83,6 +83,60 @@ test("undo continues an interrupted flip and returns the card face down", async 
   await expect(hand(page)).toHaveCount(0);
 });
 
+test("interrupted draws preserve fractional card and text geometry at landing", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "17px";
+  });
+  const samples = await page.locator("card-game").evaluate(async (host) => {
+    const root = host.shadowRoot!;
+    for (let i = 0; i < 4; i++) {
+      root.querySelector<HTMLButtonElement>("#draw-card")!.click();
+      await (host as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+      for (const node of root.querySelectorAll(".card-flight")) {
+        for (const animation of node.getAnimations({ subtree: true })) {
+          animation.pause();
+          animation.currentTime = 100;
+        }
+      }
+    }
+    const geometry = (node: Element) =>
+      [node, ...node.querySelectorAll(".rank, .suit")].map((part) => {
+        const rect = part.getBoundingClientRect();
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          font: getComputedStyle(part).font,
+        };
+      });
+    return [...root.querySelectorAll<HTMLElement>(".card-flight")].map((node) => {
+      for (const animation of node.getAnimations({ subtree: true }))
+        animation.currentTime = Number(animation.effect!.getTiming().duration);
+      const front = node.querySelector(".flight-front")!;
+      const target = root.querySelector(`[data-card-id="${node.dataset.flightId}"]`)!;
+      return {
+        flight: geometry(front),
+        target: geometry(target),
+        shadow: getComputedStyle(front).boxShadow,
+      };
+    });
+  });
+  expect(samples).toHaveLength(4);
+  for (const sample of samples) {
+    expect(sample.shadow).toContain("rgba(0, 0, 0, 0)");
+    sample.flight.forEach((part, index) => {
+      const target = sample.target[index];
+      expect(part.font).toBe(target.font);
+      for (const dimension of ["x", "y", "width", "height"] as const)
+        expect(part[dimension]).toBeCloseTo(target[dimension], 2);
+    });
+  }
+});
+
 test("an invalid drop flies back from its dragged angle without changing hand order or history", async ({
   page,
 }) => {
