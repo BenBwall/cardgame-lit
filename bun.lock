@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "@benbwall/cardgame-lit",
+      "dependencies": {
+        "@lucide/icons": "^1.46.0",
+      },
       "devDependencies": {
         "@playwright/test": "^1.63.0",
         "lit": "^3.3.3",
@@ -18,6 +21,8 @@
     "@lit-labs/ssr-dom-shim": ["@lit-labs/ssr-dom-shim@1.6.0", "", {}, "sha512-VHb0ALPMTlgKjM6yIxxoQNnpKyUKLD04VzeQdsiXkMqkvYlAHxq9glGLmgbb889/1GsohSOAjvQYoiBppXFqrQ=="],
 
     "@lit/reactive-element": ["@lit/reactive-element@2.1.2", "", { "dependencies": { "@lit-labs/ssr-dom-shim": "^1.5.0" } }, "sha512-pbCDiVMnne1lYUIaYNN5wrwQXDtHaYtg7YEFPeW+hws6U47WeFvISGUWekPGKWOP1ygrs0ef0o1VJMk1exos5A=="],
+
+    "@lucide/icons": ["@lucide/icons@1.46.0", "", {}, "sha512-pUkQ3NlUXHn0ToG/8BJxAUc9lNHn+jdtSK74YC5zoQbnJN7ZLQjlAzYZRXLzUvlTBMGnnpfmCwGfUBsUmD4isA=="],
 
     "@playwright/test": ["@playwright/test@1.63.0", "", { "dependencies": { "playwright": "1.63.0" }, "bin": { "playwright": "cli.js" } }, "sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ=="],
 

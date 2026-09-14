@@ -19,6 +19,9 @@
     "test": "bun test tests",
     "test:browser": "bun run build && playwright test"
   },
+  "dependencies": {
+    "@lucide/icons": "^1.46.0"
+  },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "lit": "^3.3.3",

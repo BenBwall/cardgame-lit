@@ -1,5 +1,8 @@
 import { LitElement, css, html, nothing } from "lit";
+import { Grid3x3, PlayingCards } from "@lucide/icons";
+import { buildLucideSvg } from "@lucide/icons/build";
 import { repeat } from "lit/directives/repeat.js";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { type Card, type SortOrder, SUIT_SYMBOLS, cardId, cardName } from "./cards.js";
 import {
   type GameState,
@@ -209,11 +212,7 @@ export class CardGame extends LitElement {
         aria-pressed=${this.handLayout === "fan"}
         @click=${() => this.setLayout("fan")}
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <rect x="8" y="4" width="8" height="15" rx="1.5" transform="rotate(-28 12 19)" />
-          <rect x="8" y="4" width="8" height="15" rx="1.5" transform="rotate(28 12 19)" />
-          <rect x="8" y="4" width="8" height="15" rx="1.5" />
-        </svg>
+        ${unsafeHTML(buildLucideSvg(PlayingCards, { hasA11yProp: false }))}
         <span class="layout-tooltip" role="tooltip">Fan layout</span>
       </button>
       <button
@@ -222,12 +221,7 @@ export class CardGame extends LitElement {
         aria-pressed=${this.handLayout === "grid"}
         @click=${() => this.setLayout("grid")}
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <rect x="4" y="3" width="6" height="7" rx="1" />
-          <rect x="14" y="3" width="6" height="7" rx="1" />
-          <rect x="4" y="14" width="6" height="7" rx="1" />
-          <rect x="14" y="14" width="6" height="7" rx="1" />
-        </svg>
+        ${unsafeHTML(buildLucideSvg(Grid3x3, { hasA11yProp: false }))}
         <span class="layout-tooltip" role="tooltip">Grid layout</span>
       </button>
     </div>`;
@@ -723,9 +717,9 @@ export class CardGame extends LitElement {
     .layout-switch svg {
       width: 1.5rem;
       height: 1.5rem;
-      fill: var(--color-surface, #f7f9f5);
+      fill: none;
       stroke: currentColor;
-      stroke-width: 1.5;
+      stroke-width: 2;
     }
     .layout-tooltip {
       position: absolute;
