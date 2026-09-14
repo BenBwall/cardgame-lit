@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { Grid3x3, PlayingCards } from "@lucide/icons";
+import { FoldHorizontal, FoldVertical, Grid3x3, PlayingCards } from "@lucide/icons";
 import { buildLucideSvg } from "@lucide/icons/build";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -25,6 +25,7 @@ export class CardGame extends LitElement {
     message: { state: true },
     confirmingReset: { state: true },
     handLayout: { state: true },
+    flipAxis: { state: true },
     handWidth: { state: true },
   };
 
@@ -34,9 +35,13 @@ export class CardGame extends LitElement {
   private message = "Draw a card to begin.";
   private confirmingReset = false;
   private handLayout: "fan" | "grid" = "fan";
+  private flipAxis: "X" | "Y" = "Y";
   private handWidth = 600;
   private resizeObserver?: ResizeObserver;
-  private cardMotion = new CardMotion(() => this.renderRoot);
+  private cardMotion = new CardMotion(
+    () => this.renderRoot,
+    () => this.flipAxis,
+  );
   private handDrag = new HandDrag((id, destination, preview) => {
     void this.reorder(id, destination, preview);
   });
@@ -227,6 +232,33 @@ export class CardGame extends LitElement {
     </div>`;
   }
 
+  private flipSwitch() {
+    return html`<div class="layout-switch" role="group" aria-label="Draw flip direction">
+      <button
+        type="button"
+        aria-label="Vertical flip"
+        aria-pressed=${this.flipAxis === "Y"}
+        @click=${() => {
+          this.flipAxis = "Y";
+        }}
+      >
+        ${unsafeHTML(buildLucideSvg(FoldHorizontal, { hasA11yProp: false }))}
+        <span class="layout-tooltip" role="tooltip">Flip around vertical axis</span>
+      </button>
+      <button
+        type="button"
+        aria-label="Horizontal flip"
+        aria-pressed=${this.flipAxis === "X"}
+        @click=${() => {
+          this.flipAxis = "X";
+        }}
+      >
+        ${unsafeHTML(buildLucideSvg(FoldVertical, { hasA11yProp: false }))}
+        <span class="layout-tooltip" role="tooltip">Flip around horizontal axis</span>
+      </button>
+    </div>`;
+  }
+
   private setLayout(layout: "fan" | "grid"): void {
     if (layout === this.handLayout) return;
     this.animateChange(() => {
@@ -313,7 +345,7 @@ export class CardGame extends LitElement {
       <div class="hand-heading">
         <h3>Your hand <span>(${hand.length})</span></h3>
         <div class="hand-controls">
-          ${this.layoutSwitch()}
+          ${this.layoutSwitch()} ${this.flipSwitch()}
           <label
             >Sort
             <select
@@ -679,6 +711,9 @@ export class CardGame extends LitElement {
       display: grid;
       place-items: center;
       transform: rotateY(180deg);
+    }
+    .flight-flipper[data-flip-axis="X"] > .flight-back {
+      transform: rotateX(180deg);
     }
     .hand > li > .card:hover,
     .hand > li > .card:focus-visible {

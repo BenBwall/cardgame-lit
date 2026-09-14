@@ -3,6 +3,7 @@ import { cardGeometry } from "./card-geometry.js";
 import type { GameState } from "./game-state.js";
 
 type Zone = "deck" | "hand" | "played";
+type FlipAxis = "X" | "Y";
 type Pose = {
   node: HTMLElement;
   x: number;
@@ -13,6 +14,7 @@ type Pose = {
   origin: string;
   flying?: boolean;
   flip?: number;
+  flipAxis?: FlipAxis;
   shadow: string;
 };
 type Snapshot = {
@@ -46,7 +48,10 @@ export class CardMotion {
   private shuffle?: Animation;
   private preference?: MediaQueryList;
 
-  constructor(private readonly root: () => DocumentFragment | HTMLElement) {}
+  constructor(
+    private readonly root: () => DocumentFragment | HTMLElement,
+    private readonly drawFlipAxis: () => FlipAxis = () => "Y",
+  ) {}
 
   connect(): void {
     this.preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -87,6 +92,7 @@ export class CardMotion {
     const geometry = cardGeometry(node);
     const flipper = flying ? node.querySelector<HTMLElement>(".flight-flipper") : null;
     const flipMatrix = flipper ? new DOMMatrix(getComputedStyle(flipper).transform) : undefined;
+    const flipAxis = flipper?.dataset.flipAxis === "X" ? "X" : "Y";
     return {
       node: node.cloneNode(true) as HTMLElement,
       x: geometry.x,
@@ -96,7 +102,15 @@ export class CardMotion {
       angle: geometry.angle,
       origin: geometry.origin,
       flying,
-      flip: flipMatrix ? (Math.atan2(-flipMatrix.m13, flipMatrix.m11) * 180) / Math.PI : undefined,
+      flip: flipMatrix
+        ? (Math.atan2(
+            flipAxis === "X" ? flipMatrix.m23 : -flipMatrix.m13,
+            flipAxis === "X" ? flipMatrix.m22 : flipMatrix.m11,
+          ) *
+            180) /
+          Math.PI
+        : undefined,
+      flipAxis: flipper ? flipAxis : undefined,
       shadow: getComputedStyle(node.querySelector(".flight-front") ?? node).boxShadow,
     };
   }
@@ -250,7 +264,13 @@ export class CardMotion {
     const duration = kind === "draw" ? 1200 : kind === "arrange" ? 560 : 840;
     const flip =
       kind === "draw" || kind === "return-deck" || from.flip !== undefined
-        ? this.flip(node, from.flip ?? 0, kind === "return-deck" ? 180 : 0, duration)
+        ? this.flip(
+            node,
+            from.flip ?? 0,
+            kind === "return-deck" ? 180 : 0,
+            duration,
+            from.flipAxis ?? this.drawFlipAxis(),
+          )
         : undefined;
     const arc = kind === "draw" ? 45 : kind === "arrange" ? 8 : 24;
     const animation = node.animate(
@@ -332,10 +352,17 @@ export class CardMotion {
     void animation.finished.then(stop, stop);
   }
 
-  private flip(node: HTMLElement, from: number, to: number, duration: number): Animation {
+  private flip(
+    node: HTMLElement,
+    from: number,
+    to: number,
+    duration: number,
+    axis: FlipAxis,
+  ): Animation {
     const flipper = node.querySelector<HTMLElement>(".flight-flipper")!;
+    flipper.dataset.flipAxis = axis;
     const animation = flipper.animate(
-      [{ transform: `rotateY(${from}deg)` }, { transform: `rotateY(${to}deg)` }],
+      [{ transform: `rotate${axis}(${from}deg)` }, { transform: `rotate${axis}(${to}deg)` }],
       { duration, easing: "ease-in-out", fill: "both" },
     );
     void animation.finished.catch(() => {});
