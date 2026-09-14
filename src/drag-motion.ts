@@ -28,12 +28,14 @@ export class DragMotion {
     while (remaining > 0) {
       const dt = Math.min(remaining, 1 / 120);
       // The grab point is relative to the center, normalized to each half-size.
-      // Opposite edges swing oppositely; a centered grip produces no torque.
+      // Let the free side hang lower, so left/right grips remain visibly different
+      // even during slow horizontal drags. A centered grip stays level.
+      const hangingAngle = -this.gripX * 32;
       const torque = this.gripX * (targetY - this.y) - this.gripY * (targetX - this.x);
-      const lean = clamp(torque * 0.85, 18);
+      const lean = clamp(hangingAngle + clamp(torque * 2.2, 32), 50);
       this.velocityX += ((targetX - this.x) * 650 - this.velocityX * 40) * dt;
       this.velocityY += ((targetY - this.y) * 650 - this.velocityY * 40) * dt;
-      this.angularVelocity += ((lean - this.angle) * 220 - this.angularVelocity * 22) * dt;
+      this.angularVelocity += ((lean - this.angle) * 180 - this.angularVelocity * 16) * dt;
       this.x += this.velocityX * dt;
       this.y += this.velocityY * dt;
       this.angle += this.angularVelocity * dt;

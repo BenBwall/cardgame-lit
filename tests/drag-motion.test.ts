@@ -41,7 +41,7 @@ test("motion remains stable after delayed frames and reduced motion follows dire
   expect([motion.x, motion.y, motion.angle]).toEqual([300, 200, 0]);
 });
 
-test("opposite grips reverse torque and centered or radial pulls stay level", () => {
+test("opposite grips reverse torque, corners hang, and centered pulls stay level", () => {
   const top = new DragMotion(0, 0, 0, -1);
   const bottom = new DragMotion(0, 0, 0, 1);
   const left = new DragMotion(0, 0, -1, 0);
@@ -60,9 +60,25 @@ test("opposite grips reverse torque and centered or radial pulls stay level", ()
   }
   expect(top.angle).toBeGreaterThan(5);
   expect(bottom.angle).toBeCloseTo(-top.angle);
-  expect(right.angle).toBeGreaterThan(5);
   expect(left.angle).toBeCloseTo(-right.angle);
   expect(center.angle).toBe(0);
-  expect(radial.angle).toBe(0);
+  expect(radial.angle).toBeLessThan(-25);
   expect(corner.angle).toBeGreaterThan(top.angle);
+});
+
+test("left and right corner grips look distinct during slow drags and while held still", () => {
+  const left = new DragMotion(0, 0, -0.6, -0.6);
+  const right = new DragMotion(0, 0, 0.6, -0.6);
+  for (let frame = 1; frame <= 30; frame++) {
+    left.step(frame, 0, 1 / 60);
+    right.step(frame, 0, 1 / 60);
+  }
+  expect(left.angle).toBeGreaterThan(20);
+  expect(right.angle).toBeLessThan(-10);
+  for (let frame = 0; frame < 120; frame++) {
+    left.step(30, 0, 1 / 60);
+    right.step(30, 0, 1 / 60);
+  }
+  expect(left.angle).toBeCloseTo(19.2, 2);
+  expect(right.angle).toBeCloseTo(-19.2, 2);
 });

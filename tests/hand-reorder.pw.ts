@@ -175,12 +175,40 @@ test("grab position controls rotation for horizontal, vertical, and diagonal pul
       const matrix = new DOMMatrix(getComputedStyle(node).transform);
       return (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
     });
+    await page.waitForTimeout(1000);
+    const restingAngle = await page.locator(".drag-preview").evaluate((node) => {
+      const matrix = new DOMMatrix(getComputedStyle(node).transform);
+      return (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
+    });
     if (sign === 0) expect(Math.abs(angle)).toBeLessThan(0.2);
-    else expect(angle * sign).toBeGreaterThan(3);
+    else expect((angle - restingAngle) * sign).toBeGreaterThan(10);
     await page.keyboard.press("Escape");
     await page.mouse.up();
     await expect(page.locator(".drag-preview")).toHaveCount(0);
     expect(await order(page)).toEqual(original);
+  }
+});
+
+test("slow horizontal drags visibly distinguish left and right corner grabs", async ({ page }) => {
+  await draw(page);
+  for (const gripX of [0.2, 0.8]) {
+    const { x, y } = await grabAt(page, cards(page).nth(2), gripX, 0.2);
+    for (let step = 1; step <= 30; step++) {
+      await page.mouse.move(x + step, y);
+      await page.waitForTimeout(16);
+    }
+    const angle = () =>
+      page.locator(".drag-preview").evaluate((node) => {
+        const matrix = new DOMMatrix(getComputedStyle(node).transform);
+        return (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
+      });
+    if (gripX < 0.5) expect(await angle()).toBeGreaterThan(20);
+    else expect(await angle()).toBeLessThan(-10);
+    // The grab point remains obvious even after movement stops.
+    await page.waitForTimeout(1000);
+    expect((await angle()) * (gripX < 0.5 ? 1 : -1)).toBeGreaterThan(18);
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
   }
 });
 
