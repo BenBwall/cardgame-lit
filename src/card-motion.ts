@@ -68,8 +68,8 @@ export class CardMotion {
     const flipMatrix = flipper ? new DOMMatrix(getComputedStyle(flipper).transform) : undefined;
     return {
       node: node.cloneNode(true) as HTMLElement,
-      x: flying ? matrix.e : rect.left,
-      y: flying ? matrix.f : rect.top,
+      x: flying ? parseFloat(style.left) + matrix.e : rect.left,
+      y: flying ? parseFloat(style.top) + matrix.f : rect.top,
       // offsetWidth/Height round away subpixels each time a flight is interrupted.
       width: flying ? parseFloat(style.width) : rect.width,
       height: flying ? parseFloat(style.height) : rect.height,
@@ -190,7 +190,9 @@ export class CardMotion {
     node.tabIndex = -1;
     node.dataset.flightId = id;
     node.dataset.flightKind = kind;
-    node.style.cssText = `width:${from.width}px;height:${from.height}px;transform-origin:${from.origin};`;
+    // Paint at the destination, then animate offsets back to zero. Translating a
+    // bitmap painted at (0, 0) leaves text blurred at fractional landing positions.
+    node.style.cssText = `left:${to.x}px;top:${to.y}px;width:${from.width}px;height:${from.height}px;transform-origin:${from.origin};`;
     this.root().appendChild(node);
     target?.setAttribute("data-in-flight", "");
     const endAngle = 0;
@@ -202,16 +204,16 @@ export class CardMotion {
     const arc = kind === "draw" ? 45 : kind === "arrange" ? 8 : 24;
     const animation = node.animate(
       [
-        { transform: transform(from.x, from.y, from.angle) },
+        { transform: transform(from.x - to.x, from.y - to.y, from.angle) },
         {
           transform: transform(
-            (from.x + to.x) / 2,
-            (from.y + to.y) / 2 - arc,
+            (from.x - to.x) / 2,
+            (from.y - to.y) / 2 - arc,
             (from.angle + endAngle) / 2,
           ),
           offset: 0.5,
         },
-        { transform: transform(to.x, to.y, endAngle) },
+        { transform: transform(0, 0, endAngle) },
       ],
       { duration, easing: "cubic-bezier(.2,.7,.25,1)", fill: "both" },
     );
@@ -227,6 +229,8 @@ export class CardMotion {
       void animation.finished.catch(() => {});
       return animation;
     });
+    let handoff: Animation | undefined;
+    let reveal: Animation | undefined;
     const stop = () => {
       if (this.flights.get(id)?.node !== node) return;
       this.flights.delete(id);
@@ -235,9 +239,22 @@ export class CardMotion {
       animation.cancel();
       flip?.cancel();
       for (const shadow of shadows) shadow.cancel();
+      handoff?.cancel();
+      reveal?.cancel();
     };
     this.flights.set(id, { node, stop });
-    void animation.finished.then(stop, stop);
+    void animation.finished.then(() => {
+      if (!target || this.flights.get(id)?.node !== node) {
+        stop();
+        return;
+      }
+      // Fractional display scaling can rasterize separate layers differently.
+      // Blend into the resting card while both remain in the exact landing pose.
+      reveal = target.animate([{ opacity: 1 }, { opacity: 1 }], { duration: 100, fill: "both" });
+      void reveal.finished.catch(() => {});
+      handoff = node.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100, fill: "both" });
+      void handoff.finished.then(stop, stop);
+    }, stop);
   }
 
   private flip(node: HTMLElement, from: number, to: number, duration: number): Animation {

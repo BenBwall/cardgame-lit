@@ -29,8 +29,8 @@ test("a draw starts face down, flips vertically without spinning, and lands face
       const m = new DOMMatrix(getComputedStyle(node).transform);
       const facing = new DOMMatrix(getComputedStyle(flipper).transform);
       return {
-        x: m.e,
-        y: m.f,
+        x: parseFloat(getComputedStyle(node).left) + m.e,
+        y: parseFloat(getComputedStyle(node).top) + m.f,
         angle: (Math.atan2(m.b, m.a) * 180) / Math.PI,
         faceDirection: facing.m11,
       };
@@ -135,6 +135,63 @@ test("interrupted draws preserve fractional card and text geometry at landing", 
         expect(part[dimension]).toBeCloseTo(target[dimension], 2);
     });
   }
+});
+
+test("the final flight and resting card render the same pixels", async ({ page }) => {
+  await draw(page);
+  const flight = flights(page);
+  const rect = await flight.evaluate((node) => {
+    for (const animation of node.getAnimations({ subtree: true })) {
+      animation.pause();
+      animation.currentTime = Number(animation.effect!.getTiming().duration);
+    }
+    return node.getBoundingClientRect().toJSON();
+  });
+  const clip = {
+    x: Math.floor(rect.x),
+    y: Math.floor(rect.y),
+    width: Math.ceil(rect.width),
+    height: Math.ceil(rect.height),
+  };
+  const landing = await page.screenshot({ clip });
+  await flight.evaluate((node) => node.getAnimations()[0].finish());
+  await settled(page);
+  expect(await page.screenshot({ clip })).toEqual(landing);
+});
+
+test.describe("fractional display scaling", () => {
+  test.use({ deviceScaleFactor: 1.5 });
+  test("landing blends between rasterizations before removing the flight", async ({ page }) => {
+    await draw(page);
+    const flight = flights(page);
+    await flight.evaluate(async (node) => {
+      for (const animation of node.getAnimations({ subtree: true })) animation.finish();
+      await Promise.resolve();
+      const handoff = node.getAnimations().at(-1)!;
+      handoff.pause();
+      handoff.currentTime = 25;
+    });
+    await expect(hand(page).first()).toHaveCSS("opacity", "1");
+    await expect(flight).toHaveCSS("opacity", "0.75");
+    await flight.evaluate((node) => {
+      node.getAnimations().at(-1)!.currentTime = 75;
+    });
+    await expect(flight).toHaveCSS("opacity", "0.25");
+    await flight.evaluate((node) => {
+      node.getAnimations().at(-1)!.currentTime = 100;
+    });
+    const rect = (await hand(page).first().boundingBox())!;
+    const clip = {
+      x: Math.floor(rect.x),
+      y: Math.floor(rect.y),
+      width: Math.ceil(rect.width),
+      height: Math.ceil(rect.height),
+    };
+    const landing = await page.screenshot({ clip });
+    await flight.evaluate((node) => node.getAnimations().at(-1)!.finish());
+    await settled(page);
+    expect(await page.screenshot({ clip })).toEqual(landing);
+  });
 });
 
 test("an invalid drop flies back from its dragged angle without changing hand order or history", async ({

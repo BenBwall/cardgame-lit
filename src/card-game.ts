@@ -502,6 +502,7 @@ export class CardGame extends LitElement {
     }
     .hand .card {
       transition: transform 120ms ease;
+      will-change: transform;
       position: relative;
       touch-action: none;
       user-select: none;
