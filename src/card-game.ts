@@ -15,6 +15,7 @@ import {
 import { HandDrag } from "./hand-drag.js";
 import { CardMotion } from "./card-motion.js";
 import { fanLayout } from "./hand-layout.js";
+import { HandSizeMotion } from "./hand-size-motion.js";
 
 const flipOptions = [
   { label: "Top to bottom", icon: ArrowDown, axis: "X", startAngle: 180 },
@@ -45,6 +46,7 @@ export class CardGame extends LitElement {
   private flipDirection = 0;
   private handWidth = 600;
   private resizeObserver?: ResizeObserver;
+  private handSizeMotion = new HandSizeMotion(() => this.renderRoot);
   private cardMotion = new CardMotion(
     () => this.renderRoot,
     () => flipOptions[this.flipDirection],
@@ -60,6 +62,7 @@ export class CardGame extends LitElement {
     this.cardMotion.connect();
     void this.updateComplete.then(() => {
       if (!this.isConnected) return;
+      this.handSizeMotion.connect();
       this.resizeObserver ??= new ResizeObserver(([entry]) => {
         if (Math.abs(this.handWidth - entry.contentRect.width) < 0.5) return;
         this.cardMotion.finish();
@@ -73,6 +76,7 @@ export class CardGame extends LitElement {
     this.handDrag.dispose();
     this.cardMotion.disconnect();
     this.resizeObserver?.disconnect();
+    this.handSizeMotion.disconnect();
     super.disconnectedCallback();
   }
 
@@ -371,57 +375,61 @@ export class CardGame extends LitElement {
         Drag cards to rearrange them. Click to play. With a card focused, use Alt + Left/Right to
         move it.
       </p>
-      ${
-        hand.length
-          ? html`<ul
-              class="hand"
-              data-layout=${this.handLayout}
-              style=${fan ? `height:${fan.height}px` : ""}
-              aria-label="Your hand"
-              @pointerdown=${(event: PointerEvent) => {
-                const card = (event.target as Element).closest<HTMLElement>("[data-card-id]");
-                if (card?.dataset.cardId) this.cardMotion.finishCard(card.dataset.cardId);
-                this.handDrag.pointerDown(event);
-              }}
-              @pointermove=${this.handDrag.pointerMove}
-              @pointerup=${this.handDrag.pointerUp}
-              @pointercancel=${this.handDrag.pointerCancel}
-              @lostpointercapture=${this.handDrag.pointerCancel}
-              @keydown=${this.reorderKey}
-            >
-              ${repeat(
-                handCards(this.game, this.sortOrder),
-                cardId,
-                (card, index) => html`<li
-                  style=${fan ? `--fan-x:${fan.slots[index].x}px;--fan-y:${fan.slots[index].y}px;--fan-order:${index}` : ""}
+      <div class="hand-region">
+        <div class="hand-content">
+          ${
+            hand.length
+              ? html`<ul
+                  class="hand"
+                  data-layout=${this.handLayout}
+                  style=${fan ? `height:${fan.height}px` : ""}
+                  aria-label="Your hand"
+                  @pointerdown=${(event: PointerEvent) => {
+                    const card = (event.target as Element).closest<HTMLElement>("[data-card-id]");
+                    if (card?.dataset.cardId) this.cardMotion.finishCard(card.dataset.cardId);
+                    this.handDrag.pointerDown(event);
+                  }}
+                  @pointermove=${this.handDrag.pointerMove}
+                  @pointerup=${this.handDrag.pointerUp}
+                  @pointercancel=${this.handDrag.pointerCancel}
+                  @lostpointercapture=${this.handDrag.pointerCancel}
+                  @keydown=${this.reorderKey}
                 >
-                  <button
-                    class="card card-shell"
-                    type="button"
-                    data-suit=${card.suit}
-                    data-card-id=${cardId(card)}
-                    data-motion-id=${cardId(card)}
-                    data-rest-angle=${fan?.slots[index].angle ?? 0}
-                    style=${`--card-angle:${fan?.slots[index].angle ?? 0}deg`}
-                    aria-describedby="hand-help"
-                    aria-label=${`Play ${cardName(card)}`}
-                    @click=${(event: MouseEvent) => {
-                      if (!this.handDrag.consumeClick(event)) void this.play(card);
-                    }}
-                  >
-                    ${this.cardFace(card)}
-                  </button>
-                </li>`,
-              )}
-            </ul>`
-          : html`<p class="empty-hand">
-              ${
-                deck.length
-                  ? "Your hand is empty. Draw a card from the deck."
-                  : "All cards played. Start a new deck whenever you like."
-              }
-            </p>`
-      }
+                  ${repeat(
+                    handCards(this.game, this.sortOrder),
+                    cardId,
+                    (card, index) => html`<li
+                      style=${fan ? `--fan-x:${fan.slots[index].x}px;--fan-y:${fan.slots[index].y}px;--fan-order:${index}` : ""}
+                    >
+                      <button
+                        class="card card-shell"
+                        type="button"
+                        data-suit=${card.suit}
+                        data-card-id=${cardId(card)}
+                        data-motion-id=${cardId(card)}
+                        data-rest-angle=${fan?.slots[index].angle ?? 0}
+                        style=${`--card-angle:${fan?.slots[index].angle ?? 0}deg`}
+                        aria-describedby="hand-help"
+                        aria-label=${`Play ${cardName(card)}`}
+                        @click=${(event: MouseEvent) => {
+                          if (!this.handDrag.consumeClick(event)) void this.play(card);
+                        }}
+                      >
+                        ${this.cardFace(card)}
+                      </button>
+                    </li>`,
+                  )}
+                </ul>`
+              : html`<p class="empty-hand">
+                  ${
+                    deck.length
+                      ? "Your hand is empty. Draw a card from the deck."
+                      : "All cards played. Start a new deck whenever you like."
+                  }
+                </p>`
+          }
+        </div>
+      </div>
       <p class="status" role="status" aria-live="polite" aria-atomic="true">${this.message}</p>
       <details>
         <summary>How to play</summary>
@@ -602,11 +610,20 @@ export class CardGame extends LitElement {
       gap: 0.5rem;
       font-size: 0.875rem;
     }
+    .hand-region {
+      margin: 1rem 0;
+    }
+    .hand-content {
+      display: flow-root;
+    }
+    .hand-content > .empty-hand {
+      margin: 0;
+    }
     .hand {
       display: flex;
       flex-wrap: wrap;
       gap: 0.625rem;
-      margin: 1rem 0;
+      margin: 0;
       padding: 0;
       list-style: none;
       isolation: isolate;

@@ -226,6 +226,11 @@ test("the final flight and resting card render the same pixels", async ({ page }
     width: Math.ceil(rect.width),
     height: Math.ceil(rect.height),
   };
+  // The card is manually at its final frame; let the independent box resize
+  // finish too so both screenshots compare the same surrounding layout.
+  await expect
+    .poll(() => page.locator(".hand-region").evaluate((node) => node.getAnimations().length))
+    .toBe(0);
   const landing = await page.screenshot({ clip });
   await flight.evaluate((node) => node.getAnimations()[0].finish());
   await settled(page);
@@ -254,6 +259,9 @@ for (const scale of [1, 1.5, 2]) {
         width: Math.ceil(rect.width) + 1,
         height: Math.ceil(rect.height) + 1,
       };
+      await expect
+        .poll(() => page.locator(".hand-region").evaluate((node) => node.getAnimations().length))
+        .toBe(0);
       const landing = await page.screenshot({ clip });
       await flight.evaluate((node) => node.getAnimations()[0].finish());
       await settled(page);

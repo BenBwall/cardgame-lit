@@ -213,6 +213,9 @@ test("fan cards land at their resting angles without a final pixel shift", async
     width: Math.ceil(bounds.width),
     height: Math.ceil(bounds.height),
   };
+  await expect
+    .poll(() => page.locator(".hand-region").evaluate((node) => node.getAnimations().length))
+    .toBe(0);
   const before = await page.screenshot({ clip });
   await page.locator(".card-flight").evaluateAll((nodes) => {
     for (const node of nodes) node.getAnimations()[0].finish();
