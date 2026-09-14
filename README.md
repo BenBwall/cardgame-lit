@@ -37,3 +37,24 @@ The component inherits font and the optional host CSS variables `--color-text`, 
 ## Provenance
 
 Ported from Ben Bergenwall's original repository linked above. The original repository contains no license file; this port does not add a new license grant.
+
+## Deploy to the Arcada homepage
+
+On Ben's configured Windows computer, pushing `main` also updates the card game embedded at [people.arcada.fi/~bergenwb](https://people.arcada.fi/~bergenwb/):
+
+```sh
+git push origin main
+```
+
+The local `origin` has two push destinations, in order: this GitHub repository, then `H:/.cardgame-lit-deploy.git`. Only a main update triggers the receiver. It creates an isolated checkout of `BenBwall/arcada-home`, commits the new `vendor/cardgame` gitlink, pushes that parent commit to GitHub, and deploys through the homepage's existing build and validation hooks. The live site is updated only after a successful static build.
+
+This requires access to H: and GitHub from the configured computer. Other branches and tags do not deploy, and this local setup is not installed by cloning the repository on another machine. Check the push output for deployment errors even if Git accepted the commit.
+
+Setup and recovery commands live in the sibling `arcada-home` project:
+
+```sh
+bun run deploy:cardgame:setup
+bun run deploy:cardgame
+```
+
+The first command configures the standalone game checkout and the homepage submodule. The second retries deployment from the current GitHub game main, including failed publication after an accepted push. The hooks leave both developer checkouts untouched. Before later homepage changes, pull `arcada-home/main` and update its submodules to pick up the automatically committed game pin.
