@@ -9,6 +9,7 @@ import {
   reorderHand,
 } from "./game-state.js";
 import { HandDrag } from "./hand-drag.js";
+import { CardMotion } from "./card-motion.js";
 
 /** Import this module once, then use <card-game> anywhere on a static page. */
 export class CardGame extends LitElement {
@@ -25,31 +26,52 @@ export class CardGame extends LitElement {
   private sortOrder: SortOrder = "draw-order";
   private message = "Draw a card to begin.";
   private confirmingReset = false;
-  private handDrag = new HandDrag((id, destination) => {
-    void this.reorder(id, destination);
+  private cardMotion = new CardMotion(() => this.renderRoot);
+  private handDrag = new HandDrag((id, destination, preview) => {
+    void this.reorder(id, destination, preview);
   });
 
   // Randomness belongs to a browser instance, never the static build or shared state.
   connectedCallback(): void {
     super.connectedCallback();
     this.game ??= newGame();
+    this.cardMotion.connect();
   }
 
   disconnectedCallback(): void {
-    this.handDrag.cancel();
+    this.handDrag.dispose();
+    this.cardMotion.disconnect();
     super.disconnectedCallback();
   }
 
-  private move(next: GameState, message: string): void {
+  private animateChange(change: () => void, preview?: HTMLElement, shuffle = false): void {
+    if (!this.game) return;
+    const before = this.cardMotion.capture(this.game, preview);
+    this.handDrag.dispose();
+    change();
+    void this.updateComplete.then(() => {
+      if (this.game) this.cardMotion.animate(before, this.game, shuffle);
+    });
+  }
+
+  private move(
+    next: GameState,
+    message: string,
+    preview?: HTMLElement,
+    sortOrder = this.sortOrder,
+  ): void {
     if (!this.game || next === this.game) return;
-    this.handDrag.cancel();
-    this.history = [...this.history, { game: this.game, sortOrder: this.sortOrder }];
-    this.game = next;
-    this.confirmingReset = false;
-    this.message =
-      next.deck.length === 0 && next.hand.length === 0
-        ? "All 52 cards played. Start a new deck to play again."
-        : message;
+    this.animateChange(() => {
+      if (!this.game) return;
+      this.history = [...this.history, { game: this.game, sortOrder: this.sortOrder }];
+      this.game = next;
+      this.sortOrder = sortOrder;
+      this.confirmingReset = false;
+      this.message =
+        next.deck.length === 0 && next.hand.length === 0
+          ? "All 52 cards played. Start a new deck to play again."
+          : message;
+    }, preview);
   }
 
   private draw(): void {
@@ -70,41 +92,58 @@ export class CardGame extends LitElement {
       buttons[Math.min(index, buttons.length - 1)] ??
       this.renderRoot.querySelector<HTMLButtonElement>("#draw-card:not(:disabled)") ??
       this.renderRoot.querySelector<HTMLButtonElement>("#new-deck")
-    )?.focus();
+    )?.focus({ preventScroll: true });
   }
 
   private undo(): void {
     const previous = this.history.at(-1);
     if (!previous) return;
-    this.handDrag.cancel();
-    this.game = previous.game;
-    this.sortOrder = previous.sortOrder;
-    this.history = this.history.slice(0, -1);
-    this.confirmingReset = false;
-    this.message = "Last move undone.";
+    this.animateChange(() => {
+      this.game = previous.game;
+      this.sortOrder = previous.sortOrder;
+      this.history = this.history.slice(0, -1);
+      this.confirmingReset = false;
+      this.message = "Last move undone.";
+    });
   }
 
   private async reset(): Promise<void> {
-    this.handDrag.cancel();
-    this.game = newGame();
-    this.sortOrder = "draw-order";
-    this.history = [];
-    this.confirmingReset = false;
-    this.message = "New deck shuffled. Draw a card to begin.";
+    this.animateChange(
+      () => {
+        this.game = newGame();
+        this.sortOrder = "draw-order";
+        this.history = [];
+        this.confirmingReset = false;
+        this.message = "New deck shuffled. Draw a card to begin.";
+      },
+      undefined,
+      true,
+    );
     await this.updateComplete;
-    this.renderRoot.querySelector<HTMLButtonElement>("#draw-card")?.focus();
+    this.renderRoot.querySelector<HTMLButtonElement>("#draw-card")?.focus({ preventScroll: true });
   }
 
-  private async reorder(id: string, destination: number): Promise<void> {
+  private async reorder(id: string, destination?: number, preview?: HTMLElement): Promise<void> {
     if (!this.game) return;
     const card = this.game.hand.find((card) => cardId(card) === id);
-    const next = reorderHand(this.game, id, destination, this.sortOrder);
-    if (!card || next === this.game) return;
+    const next =
+      destination === undefined
+        ? this.game
+        : reorderHand(this.game, id, destination, this.sortOrder);
+    if (!card) {
+      preview?.remove();
+      return;
+    }
+    if (next === this.game) {
+      if (preview) this.animateChange(() => {}, preview);
+      return;
+    }
     this.move(
       next,
-      `Moved ${cardName(card)} to position ${destination + 1} of ${next.hand.length}.`,
+      `Moved ${cardName(card)} to position ${destination! + 1} of ${next.hand.length}.`,
+      preview,
+      "manual",
     );
-    this.sortOrder = "manual";
     await this.updateComplete;
     this.renderRoot
       .querySelector<HTMLButtonElement>(`[data-card-id="${id}"]`)
@@ -191,12 +230,13 @@ export class CardGame extends LitElement {
           </button>
           <span>Deck <strong>${deck.length}</strong></span>
         </div>
-        <div class="pile">
+        <div class="pile played-pile">
           ${
             top
               ? html`<div
                   class="card face"
                   data-suit=${top.suit}
+                  data-motion-id=${cardId(top)}
                   role="img"
                   aria-label=${`Last played: ${cardName(top)}`}
                 >
@@ -215,8 +255,9 @@ export class CardGame extends LitElement {
             aria-label="Sort"
             .value=${this.sortOrder}
             @change=${(event: Event) => {
-              this.handDrag.cancel();
-              this.sortOrder = (event.target as HTMLSelectElement).value as SortOrder;
+              this.animateChange(() => {
+                this.sortOrder = (event.target as HTMLSelectElement).value as SortOrder;
+              });
             }}
           >
             <option value="draw-order">Draw order</option>
@@ -235,7 +276,10 @@ export class CardGame extends LitElement {
           ? html`<ul
               class="hand"
               aria-label="Your hand"
-              @pointerdown=${this.handDrag.pointerDown}
+              @pointerdown=${(event: PointerEvent) => {
+                this.cardMotion.finish();
+                this.handDrag.pointerDown(event);
+              }}
               @pointermove=${this.handDrag.pointerMove}
               @pointerup=${this.handDrag.pointerUp}
               @pointercancel=${this.handDrag.pointerCancel}
@@ -249,6 +293,7 @@ export class CardGame extends LitElement {
                     type="button"
                     data-suit=${card.suit}
                     data-card-id=${cardId(card)}
+                    data-motion-id=${cardId(card)}
                     aria-describedby="hand-help"
                     aria-label=${`Play ${cardName(card)}`}
                     @click=${(event: MouseEvent) => {
@@ -490,7 +535,8 @@ export class CardGame extends LitElement {
     .card[data-drop-side="after"]::after {
       right: -0.45rem;
     }
-    .drag-preview {
+    .drag-preview,
+    .card-flight {
       position: fixed;
       left: 0;
       top: 0;
@@ -501,12 +547,18 @@ export class CardGame extends LitElement {
       will-change: transform;
       cursor: grabbing;
     }
+    .card[data-in-flight] {
+      opacity: 0;
+    }
     .hand .card:hover,
     .hand .card:focus-visible {
       transform: translateY(-0.25rem);
     }
     .hand[data-dragging] .card:hover,
     .hand[data-dragging] .card:focus-visible {
+      transform: none;
+    }
+    .hand .card[data-in-flight] {
       transform: none;
     }
     .empty-hand {

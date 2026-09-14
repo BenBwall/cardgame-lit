@@ -25,7 +25,13 @@ export class HandDrag {
   private drag?: Drag;
   private suppressClick = false;
 
-  constructor(private readonly drop: (id: string, destination: number) => void) {}
+  constructor(
+    private readonly drop: (
+      id: string,
+      destination: number | undefined,
+      preview: HTMLElement,
+    ) => void,
+  ) {}
 
   pointerDown = (event: PointerEvent): void => {
     if (this.drag || !event.isPrimary || event.button !== 0) return;
@@ -131,6 +137,10 @@ export class HandDrag {
     if (drag.preview) this.position(event.clientX, event.clientY);
     const destination = drag.destination;
     const id = drag.source.dataset.cardId;
+    if (drag.preview && id) {
+      this.release(false, destination);
+      return;
+    }
     const tapped =
       !drag.preview &&
       event.pointerType === "touch" &&
@@ -143,7 +153,6 @@ export class HandDrag {
       this.suppressClick = true;
       drag.source.click();
     }
-    if (id && destination !== undefined) this.drop(id, destination);
   };
 
   pointerCancel = (event: PointerEvent): void => {
@@ -151,8 +160,23 @@ export class HandDrag {
   };
 
   cancel = (): void => {
+    this.release(true);
+  };
+
+  dispose = (): void => {
     this.clear(true);
   };
+
+  private release(releaseCapture: boolean, destination?: number): void {
+    const drag = this.drag;
+    if (!drag) return;
+    const preview = drag.preview;
+    const id = drag.source.dataset.cardId;
+    drag.preview = undefined;
+    this.clear(releaseCapture);
+    if (preview && id) this.drop(id, destination, preview);
+    else preview?.remove();
+  }
 
   private clear(releaseCapture: boolean): void {
     const drag = this.drag;

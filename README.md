@@ -20,6 +20,8 @@ The build emits reusable ES modules and declarations in `dist/`, and a self-cont
 
 Browser tests use Microsoft Edge and a local test server, and cover mouse and touch drags, directional tilt and settling, reduced motion, wrapped rows, keyboard reordering, undo, cancellation, and click/tap-to-play.
 
+Cards animate between their actual positions: draws spin from the deck into the hand, played cards fly to the played pile, and sorting or reordering slides cards into their new slots. Invalid drops and canceled drags fly back from their current position and angle. Undo reverses card movements; a new deck gathers the visible cards and shuffles. Rapid actions continue from any flight already in progress. Reduced motion skips these flights, and scrolling, resizing, or removing the component clears them safely.
+
 ## Arrange your hand
 
 Drag a card to the marked insertion point to reorder your hand with a mouse, touch, or pen. The hand switches to **Manual order**; drawing adds cards at the end of your arrangement. Selecting **Draw order** restores the original draw sequence, and you can switch back to your manual arrangement. **Undo** restores the previous arrangement and sort selection. Drop outside the hand or press Escape to cancel.
