@@ -55,6 +55,69 @@ test("a draw starts face down, flips vertically without spinning, and lands face
   await expect(hand(page).first()).toHaveCSS("opacity", "1");
 });
 
+for (const width of [1280, 420]) {
+  test(`new draws leave every earlier animation untouched at width ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1300 });
+    await page.goto("/");
+    const result = await page.locator("card-game").evaluate(async (host) => {
+      const root = host.shadowRoot!;
+      const drawNext = async () => {
+        root.querySelector<HTMLButtonElement>("#draw-card")!.click();
+        await (host as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+      };
+      const tracked: {
+        node: HTMLElement;
+        animations: Animation[];
+        frames: string;
+        rect: string;
+      }[] = [];
+      for (let i = 0; i < 6; i++) {
+        await drawNext();
+        const node = root.querySelectorAll<HTMLElement>(".hand button")[i];
+        const animations = node.getAnimations({ subtree: true });
+        for (const animation of animations) {
+          animation.pause();
+          animation.currentTime = 240;
+        }
+        tracked.push({
+          node,
+          animations,
+          frames: JSON.stringify(
+            animations.map((a) => (a.effect as KeyframeEffect).getKeyframes()),
+          ),
+          rect: JSON.stringify(node.getBoundingClientRect()),
+        });
+      }
+      const unchanged = tracked.map(({ node, animations, frames, rect }) => ({
+        sameAnimations: animations.every((a) => node.getAnimations({ subtree: true }).includes(a)),
+        sameTime: animations.every((a) => a.currentTime === 240),
+        sameKeyframes:
+          JSON.stringify(animations.map((a) => (a.effect as KeyframeEffect).getKeyframes())) ===
+          frames,
+        samePosition: JSON.stringify(node.getBoundingClientRect()) === rect,
+        kind: node.dataset.flightKind,
+      }));
+      tracked[0].node.getAnimations()[0].finish();
+      await Promise.resolve();
+      return {
+        unchanged,
+        firstFinished: !tracked[0].node.hasAttribute("data-in-flight"),
+        othersContinue: tracked.slice(1).every(({ node }) => node.hasAttribute("data-in-flight")),
+      };
+    });
+    for (const card of result.unchanged)
+      expect(card).toEqual({
+        sameAnimations: true,
+        sameTime: true,
+        sameKeyframes: true,
+        samePosition: true,
+        kind: "draw",
+      });
+    expect(result.firstFinished).toBe(true);
+    expect(result.othersContinue).toBe(true);
+  });
+}
+
 test("undo continues an interrupted flip and returns the card face down", async ({ page }) => {
   await draw(page);
   const facing = await flights(page).evaluate((node) => {

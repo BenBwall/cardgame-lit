@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 import { type Card, type SortOrder, SUIT_SYMBOLS, cardId, cardName } from "./cards.js";
 import {
   type GameState,
@@ -282,7 +283,8 @@ export class CardGame extends LitElement {
               class="hand"
               aria-label="Your hand"
               @pointerdown=${(event: PointerEvent) => {
-                this.cardMotion.finish();
+                const card = (event.target as Element).closest<HTMLElement>("[data-card-id]");
+                if (card?.dataset.cardId) this.cardMotion.finishCard(card.dataset.cardId);
                 this.handDrag.pointerDown(event);
               }}
               @pointermove=${this.handDrag.pointerMove}
@@ -291,7 +293,9 @@ export class CardGame extends LitElement {
               @lostpointercapture=${this.handDrag.pointerCancel}
               @keydown=${this.reorderKey}
             >
-              ${handCards(this.game, this.sortOrder).map(
+              ${repeat(
+                handCards(this.game, this.sortOrder),
+                cardId,
                 (card) => html`<li>
                   <button
                     class="card card-shell"

@@ -63,6 +63,33 @@ export class CardMotion {
     this.shuffle = undefined;
   };
 
+  finishCard(id: string): void {
+    this.flights.get(id)?.stop();
+  }
+
+  private destination(node: HTMLElement): Pose {
+    const pose = this.pose(node);
+    // Measure layout independently of the card's current translation and lean.
+    const style = getComputedStyle(node);
+    const matrix = new DOMMatrix(style.transform);
+    const [ox, oy] = style.transformOrigin.split(" ").map(parseFloat);
+    pose.width = parseFloat(style.width);
+    pose.height = parseFloat(style.height);
+    const corners = [
+      [0, 0],
+      [pose.width, 0],
+      [0, pose.height],
+      [pose.width, pose.height],
+    ];
+    pose.x -=
+      matrix.e +
+      Math.min(...corners.map(([x, y]) => matrix.a * (x - ox) + matrix.c * (y - oy) + ox));
+    pose.y -=
+      matrix.f +
+      Math.min(...corners.map(([x, y]) => matrix.b * (x - ox) + matrix.d * (y - oy) + oy));
+    return pose;
+  }
+
   private pose(node: HTMLElement, flying = false, anchor?: { x: number; y: number }): Pose {
     const rect = node.getBoundingClientRect();
     const style = getComputedStyle(node);
@@ -95,7 +122,7 @@ export class CardMotion {
     if (released?.dataset.motionId) cards.set(released.dataset.motionId, this.pose(released, true));
     const deck = root.querySelector<HTMLElement>("#draw-card");
     const played = root.querySelector<HTMLElement>(".played-pile .card");
-    this.finish();
+    this.version++;
     released?.remove();
     return {
       version: this.version,
@@ -120,16 +147,29 @@ export class CardMotion {
       const previousZone = before.zones.get(id);
       const zone = nextZones.get(id);
       const target = targets.get(id);
+      const active = this.flights.get(id);
       let from = before.cards.get(id);
       // A newly exposed card beneath the played pile stays in place.
       if (!from && previousZone === zone && zone === "played") continue;
       const destination = target ?? (zone === "deck" ? deck : zone === "played" ? played : null);
-      if (!destination) continue;
-      const to = this.pose(destination);
-      // Land at the layout slot; the normal hover/focus lift resumes after landing.
-      const targetTransform = new DOMMatrix(getComputedStyle(destination).transform);
-      to.x -= targetTransform.e;
-      to.y -= targetTransform.f;
+      if (!destination) {
+        active?.stop();
+        continue;
+      }
+      const to = this.destination(destination);
+      if (active) {
+        const sameDestination =
+          previousZone === zone &&
+          (target === active.node || (!target && active.node.hasAttribute("data-flight-ghost"))) &&
+          Math.hypot(active.anchor.x - to.x, active.anchor.y - to.y) < 0.1;
+        // Unrelated updates must not touch the animation objects, time, or easing.
+        if (sameDestination) continue;
+        active.stop();
+        // Capture resting styles after stopping only this affected card.
+        to.shadow = getComputedStyle(
+          destination.querySelector(".flight-front") ?? destination,
+        ).boxShadow;
+      }
       if (!from) {
         const pile = previousZone === "played" ? before.played : before.deck;
         if (!pile) continue;
@@ -156,6 +196,7 @@ export class CardMotion {
       this.fly(id, from, to, target, kind);
     }
     if (shuffle && deck) {
+      this.shuffle?.cancel();
       this.shuffle = deck.animate(
         [
           { transform: "rotate(0deg)" },
@@ -238,7 +279,7 @@ export class CardMotion {
       return animation;
     });
     const stop = () => {
-      if (this.flights.get(id)?.node !== node) return;
+      if (this.flights.get(id) !== flight) return;
       this.flights.delete(id);
       node.classList.remove("card-flight");
       node.removeAttribute("data-flight-id");
@@ -250,7 +291,8 @@ export class CardMotion {
       flip?.cancel();
       for (const shadow of shadows) shadow.cancel();
     };
-    this.flights.set(id, { node, stop, anchor: { x: to.x, y: to.y } });
+    const flight = { node, stop, anchor: { x: to.x, y: to.y } };
+    this.flights.set(id, flight);
     void animation.finished.then(stop, stop);
   }
 
