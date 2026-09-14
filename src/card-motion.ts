@@ -33,7 +33,10 @@ const transform = (x: number, y: number, angle: number) =>
 /** Animate the visual cards while game state and controls remain immediately usable. */
 export class CardMotion {
   private version = 0;
-  private flights = new Map<string, { node: HTMLElement; stop: () => void }>();
+  private flights = new Map<
+    string,
+    { node: HTMLElement; stop: () => void; anchor: { x: number; y: number } }
+  >();
   private shuffle?: Animation;
   private preference?: MediaQueryList;
 
@@ -60,7 +63,7 @@ export class CardMotion {
     this.shuffle = undefined;
   };
 
-  private pose(node: HTMLElement, flying = false): Pose {
+  private pose(node: HTMLElement, flying = false, anchor?: { x: number; y: number }): Pose {
     const rect = node.getBoundingClientRect();
     const style = getComputedStyle(node);
     const matrix = new DOMMatrix(style.transform);
@@ -68,8 +71,8 @@ export class CardMotion {
     const flipMatrix = flipper ? new DOMMatrix(getComputedStyle(flipper).transform) : undefined;
     return {
       node: node.cloneNode(true) as HTMLElement,
-      x: flying ? parseFloat(style.left) + matrix.e : rect.left,
-      y: flying ? parseFloat(style.top) + matrix.f : rect.top,
+      x: flying ? (anchor?.x ?? parseFloat(style.left)) + matrix.e : rect.left,
+      y: flying ? (anchor?.y ?? parseFloat(style.top)) + matrix.f : rect.top,
       // offsetWidth/Height round away subpixels each time a flight is interrupted.
       width: flying ? parseFloat(style.width) : rect.width,
       height: flying ? parseFloat(style.height) : rect.height,
@@ -87,7 +90,8 @@ export class CardMotion {
     for (const node of root.querySelectorAll<HTMLElement>("[data-motion-id]"))
       cards.set(node.dataset.motionId!, this.pose(node, node.classList.contains("drag-preview")));
     // Continue interrupted flights from what is actually on screen, not their destinations.
-    for (const [id, flight] of this.flights) cards.set(id, this.pose(flight.node, true));
+    for (const [id, flight] of this.flights)
+      cards.set(id, this.pose(flight.node, true, flight.anchor));
     if (released?.dataset.motionId) cards.set(released.dataset.motionId, this.pose(released, true));
     const deck = root.querySelector<HTMLElement>("#draw-card");
     const played = root.querySelector<HTMLElement>(".played-pile .card");
@@ -172,28 +176,34 @@ export class CardMotion {
     target: HTMLElement | undefined,
     kind: string,
   ): void {
-    const node = from.node;
-    node.classList.remove("drag-preview");
+    // Keep the real destination element throughout arrival: no duplicate face or
+    // opacity handoff. Only cards leaving the DOM (e.g. returning to the deck)
+    // need a temporary visual copy.
+    const node = target ?? from.node;
+    const origin = node.style.transformOrigin;
+    if (!target) {
+      node.classList.remove("drag-preview");
+      for (const attribute of [
+        "id",
+        "data-card-id",
+        "data-motion-id",
+        "data-drag-source",
+        "data-drop-side",
+        "data-in-flight",
+        "aria-describedby",
+      ])
+        node.removeAttribute(attribute);
+      node.setAttribute("aria-hidden", "true");
+      node.inert = true;
+      node.tabIndex = -1;
+      node.dataset.flightGhost = "";
+      node.style.cssText = `left:${to.x}px;top:${to.y}px;width:${from.width}px;height:${from.height}px;`;
+      this.root().appendChild(node);
+    }
+    node.style.transformOrigin = from.origin;
     node.classList.add("card-flight");
-    for (const attribute of [
-      "id",
-      "data-card-id",
-      "data-motion-id",
-      "data-drag-source",
-      "data-drop-side",
-      "data-in-flight",
-      "aria-describedby",
-    ])
-      node.removeAttribute(attribute);
-    node.setAttribute("aria-hidden", "true");
-    node.inert = true;
-    node.tabIndex = -1;
     node.dataset.flightId = id;
     node.dataset.flightKind = kind;
-    // Paint at the destination, then animate offsets back to zero. Translating a
-    // bitmap painted at (0, 0) leaves text blurred at fractional landing positions.
-    node.style.cssText = `left:${to.x}px;top:${to.y}px;width:${from.width}px;height:${from.height}px;transform-origin:${from.origin};`;
-    this.root().appendChild(node);
     target?.setAttribute("data-in-flight", "");
     const endAngle = 0;
     const duration = kind === "draw" ? 600 : kind === "arrange" ? 280 : 420;
@@ -217,11 +227,9 @@ export class CardMotion {
       ],
       { duration, easing: "cubic-bezier(.2,.7,.25,1)", fill: "both" },
     );
-    const surfaces = flip
-      ? [...node.querySelectorAll<HTMLElement>(".flight-front, .flight-back")]
-      : [node];
+    const surfaces = [...node.querySelectorAll<HTMLElement>(".flight-front, .flight-back")];
     const shadows = surfaces.map((surface) => {
-      const shadow = from.flying ? from.shadow : getComputedStyle(surface).boxShadow;
+      const shadow = from.flying ? from.shadow : "0 0.5rem 1.5rem #0004";
       const animation = surface.animate(
         [{ boxShadow: shadow }, { boxShadow: shadow, offset: 0.65 }, { boxShadow: to.shadow }],
         { duration, easing: "ease-in-out", fill: "both" },
@@ -229,48 +237,25 @@ export class CardMotion {
       void animation.finished.catch(() => {});
       return animation;
     });
-    let handoff: Animation | undefined;
-    let reveal: Animation | undefined;
     const stop = () => {
       if (this.flights.get(id)?.node !== node) return;
       this.flights.delete(id);
-      target?.removeAttribute("data-in-flight");
-      node.remove();
+      node.classList.remove("card-flight");
+      node.removeAttribute("data-flight-id");
+      node.removeAttribute("data-flight-kind");
+      node.removeAttribute("data-in-flight");
+      node.style.transformOrigin = origin;
+      if (!target) node.remove();
       animation.cancel();
       flip?.cancel();
       for (const shadow of shadows) shadow.cancel();
-      handoff?.cancel();
-      reveal?.cancel();
     };
-    this.flights.set(id, { node, stop });
-    void animation.finished.then(() => {
-      if (!target || this.flights.get(id)?.node !== node) {
-        stop();
-        return;
-      }
-      // Fractional display scaling can rasterize separate layers differently.
-      // Blend into the resting card while both remain in the exact landing pose.
-      reveal = target.animate([{ opacity: 1 }, { opacity: 1 }], { duration: 100, fill: "both" });
-      void reveal.finished.catch(() => {});
-      handoff = node.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 100, fill: "both" });
-      void handoff.finished.then(stop, stop);
-    }, stop);
+    this.flights.set(id, { node, stop, anchor: { x: to.x, y: to.y } });
+    void animation.finished.then(stop, stop);
   }
 
   private flip(node: HTMLElement, from: number, to: number, duration: number): Animation {
-    const face = node.querySelector(".flight-front") ?? node;
-    const front = document.createElement("span");
-    front.className = "card face flight-front";
-    front.dataset.suit = node.dataset.suit;
-    front.append(...[...face.childNodes].map((child) => child.cloneNode(true)));
-    const back = document.createElement("span");
-    back.className = "card back flight-back";
-    back.textContent = "✦";
-    const flipper = document.createElement("span");
-    flipper.className = "flight-flipper";
-    flipper.append(front, back);
-    node.replaceChildren(flipper);
-    node.classList.add("flipping");
+    const flipper = node.querySelector<HTMLElement>(".flight-flipper")!;
     const animation = flipper.animate(
       [{ transform: `rotateY(${from}deg)` }, { transform: `rotateY(${to}deg)` }],
       { duration, easing: "ease-in-out", fill: "both" },

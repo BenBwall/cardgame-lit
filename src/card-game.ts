@@ -174,9 +174,14 @@ export class CardGame extends LitElement {
   }
 
   private cardFace(card: Card) {
-    return html`<span class="rank">${card.rank}</span>
-      <span class="suit">${SUIT_SYMBOLS[card.suit]}</span>
-      <span class="rank bottom">${card.rank}</span>`;
+    return html`<span class="flight-flipper" aria-hidden="true">
+      <span class="card face flight-front" data-suit=${card.suit}>
+        <span class="rank">${card.rank}</span>
+        <span class="suit">${SUIT_SYMBOLS[card.suit]}</span>
+        <span class="rank bottom">${card.rank}</span>
+      </span>
+      <span class="card back flight-back">✦</span>
+    </span>`;
   }
 
   protected render() {
@@ -234,7 +239,7 @@ export class CardGame extends LitElement {
           ${
             top
               ? html`<div
-                  class="card face"
+                  class="card card-shell"
                   data-suit=${top.suit}
                   data-motion-id=${cardId(top)}
                   role="img"
@@ -289,7 +294,7 @@ export class CardGame extends LitElement {
               ${handCards(this.game, this.sortOrder).map(
                 (card) => html`<li>
                   <button
-                    class="card face"
+                    class="card card-shell"
                     type="button"
                     data-suit=${card.suit}
                     data-card-id=${cardId(card)}
@@ -500,7 +505,7 @@ export class CardGame extends LitElement {
       padding: 0;
       list-style: none;
     }
-    .hand .card {
+    .hand > li > .card {
       transition: transform 120ms ease;
       will-change: transform;
       position: relative;
@@ -513,11 +518,11 @@ export class CardGame extends LitElement {
       color: var(--color-muted, #506050);
       line-height: 1.5;
     }
-    .hand[data-dragging] .card {
+    .hand[data-dragging] > li > .card {
       transform: none;
       cursor: grabbing;
     }
-    .hand .card[data-drag-source] {
+    .hand > li > .card[data-drag-source] {
       opacity: 0.35;
     }
     .card[data-drop-side]::after {
@@ -537,7 +542,7 @@ export class CardGame extends LitElement {
       right: -0.45rem;
     }
     .drag-preview,
-    .card-flight {
+    .card-flight[data-flight-ghost] {
       position: fixed;
       left: 0;
       top: 0;
@@ -548,10 +553,11 @@ export class CardGame extends LitElement {
       will-change: transform;
       cursor: grabbing;
     }
-    .card[data-in-flight] {
-      opacity: 0;
+    .card-flight {
+      z-index: 100;
+      pointer-events: none;
     }
-    .card-flight.flipping {
+    .card-shell {
       padding: 0;
       border: 0;
       background: transparent;
@@ -564,6 +570,8 @@ export class CardGame extends LitElement {
       width: 100%;
       height: 100%;
       transform-style: preserve-3d;
+      transform: rotateY(0deg);
+      will-change: transform;
     }
     .flight-front,
     .flight-back {
@@ -572,6 +580,8 @@ export class CardGame extends LitElement {
       width: 100%;
       height: 100%;
       backface-visibility: hidden;
+    }
+    .drag-preview .flight-front {
       box-shadow: 0 0.5rem 1.5rem #0004;
     }
     .flight-back {
@@ -579,16 +589,17 @@ export class CardGame extends LitElement {
       place-items: center;
       transform: rotateY(180deg);
     }
-    .hand .card:hover,
-    .hand .card:focus-visible {
+    .hand > li > .card:hover,
+    .hand > li > .card:focus-visible {
       transform: translateY(-0.25rem);
     }
-    .hand[data-dragging] .card:hover,
-    .hand[data-dragging] .card:focus-visible {
+    .hand[data-dragging] > li > .card:hover,
+    .hand[data-dragging] > li > .card:focus-visible {
       transform: none;
     }
-    .hand .card[data-in-flight] {
+    .hand > li > .card[data-in-flight] {
       transform: none;
+      transition: none;
     }
     .empty-hand {
       padding-block: 1rem;
@@ -610,7 +621,7 @@ export class CardGame extends LitElement {
       width: fit-content;
     }
     @media (prefers-reduced-motion: reduce) {
-      .hand .card {
+      .hand > li > .card {
         transition: none;
       }
     }

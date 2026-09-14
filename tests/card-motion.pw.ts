@@ -15,7 +15,6 @@ test("a draw starts face down, flips vertically without spinning, and lands face
   const flight = flights(page);
   await expect(flight).toHaveAttribute("data-flight-kind", "draw");
   const deck = (await page.locator("#draw-card").boundingBox())!;
-  const target = (await hand(page).first().boundingBox())!;
   const samples = await flight.evaluate((node) => {
     const animation = node.getAnimations()[0];
     const flipper = node.querySelector<HTMLElement>(".flight-flipper")!;
@@ -29,13 +28,14 @@ test("a draw starts face down, flips vertically without spinning, and lands face
       const m = new DOMMatrix(getComputedStyle(node).transform);
       const facing = new DOMMatrix(getComputedStyle(flipper).transform);
       return {
-        x: parseFloat(getComputedStyle(node).left) + m.e,
-        y: parseFloat(getComputedStyle(node).top) + m.f,
+        x: node.getBoundingClientRect().left,
+        y: node.getBoundingClientRect().top,
         angle: (Math.atan2(m.b, m.a) * 180) / Math.PI,
         faceDirection: facing.m11,
       };
     });
   });
+  const target = (await hand(page).first().boundingBox())!;
   expect(samples[0].x).toBeCloseTo(deck.x, 0);
   expect(samples[0].y).toBeCloseTo(deck.y, 0);
   expect(samples[0].faceDirection).toBeCloseTo(-1);
@@ -49,7 +49,7 @@ test("a draw starts face down, flips vertically without spinning, and lands face
   expect(samples[2].x).toBeCloseTo(target.x, 0);
   expect(samples[2].y).toBeCloseTo(target.y, 0);
   expect(samples[2].angle).toBeCloseTo(0);
-  await expect(hand(page).first()).toHaveCSS("opacity", "0");
+  await expect(hand(page).first()).toHaveCSS("opacity", "1");
   await flight.evaluate((node) => node.getAnimations()[0].finish());
   await settled(page);
   await expect(hand(page).first()).toHaveCSS("opacity", "1");
@@ -113,17 +113,23 @@ test("interrupted draws preserve fractional card and text geometry at landing", 
           font: getComputedStyle(part).font,
         };
       });
-    return [...root.querySelectorAll<HTMLElement>(".card-flight")].map((node) => {
+    const moving = [...root.querySelectorAll<HTMLElement>(".card-flight")];
+    const samples = moving.map((node) => {
       for (const animation of node.getAnimations({ subtree: true }))
         animation.currentTime = Number(animation.effect!.getTiming().duration);
       const front = node.querySelector(".flight-front")!;
-      const target = root.querySelector(`[data-card-id="${node.dataset.flightId}"]`)!;
       return {
+        id: node.dataset.flightId,
         flight: geometry(front),
-        target: geometry(target),
         shadow: getComputedStyle(front).boxShadow,
       };
     });
+    for (const node of moving) node.getAnimations()[0].finish();
+    await Promise.resolve();
+    return samples.map((sample) => ({
+      ...sample,
+      target: geometry(root.querySelector(`[data-card-id="${sample.id}"] .flight-front`)!),
+    }));
   });
   expect(samples).toHaveLength(4);
   for (const sample of samples) {
@@ -159,40 +165,41 @@ test("the final flight and resting card render the same pixels", async ({ page }
   expect(await page.screenshot({ clip })).toEqual(landing);
 });
 
-test.describe("fractional display scaling", () => {
-  test.use({ deviceScaleFactor: 1.5 });
-  test("landing blends between rasterizations before removing the flight", async ({ page }) => {
-    await draw(page);
-    const flight = flights(page);
-    await flight.evaluate(async (node) => {
-      for (const animation of node.getAnimations({ subtree: true })) animation.finish();
-      await Promise.resolve();
-      const handoff = node.getAnimations().at(-1)!;
-      handoff.pause();
-      handoff.currentTime = 25;
+for (const scale of [1, 1.5, 2]) {
+  test.describe(`display scaling ${scale}`, () => {
+    test.use({ deviceScaleFactor: scale });
+    test("the same opaque hand card remains through the final frame", async ({ page }) => {
+      await draw(page);
+      const flight = flights(page);
+      const element = await flight.elementHandle();
+      await expect(page.locator("[data-flight-ghost]")).toHaveCount(0);
+      const rect = await flight.evaluate((node) => {
+        for (const animation of node.getAnimations({ subtree: true })) {
+          animation.pause();
+          animation.currentTime = Number(animation.effect!.getTiming().duration);
+        }
+        return node.getBoundingClientRect().toJSON();
+      });
+      await expect(flight).toHaveCSS("opacity", "1");
+      const clip = {
+        x: Math.floor(rect.x),
+        y: Math.floor(rect.y),
+        width: Math.ceil(rect.width) + 1,
+        height: Math.ceil(rect.height) + 1,
+      };
+      const landing = await page.screenshot({ clip });
+      await flight.evaluate((node) => node.getAnimations()[0].finish());
+      await settled(page);
+      expect(
+        await hand(page)
+          .first()
+          .evaluate((node, original) => node === original, element),
+      ).toBe(true);
+      await expect(hand(page).first()).toHaveCSS("opacity", "1");
+      expect(await page.screenshot({ clip })).toEqual(landing);
     });
-    await expect(hand(page).first()).toHaveCSS("opacity", "1");
-    await expect(flight).toHaveCSS("opacity", "0.75");
-    await flight.evaluate((node) => {
-      node.getAnimations().at(-1)!.currentTime = 75;
-    });
-    await expect(flight).toHaveCSS("opacity", "0.25");
-    await flight.evaluate((node) => {
-      node.getAnimations().at(-1)!.currentTime = 100;
-    });
-    const rect = (await hand(page).first().boundingBox())!;
-    const clip = {
-      x: Math.floor(rect.x),
-      y: Math.floor(rect.y),
-      width: Math.ceil(rect.width),
-      height: Math.ceil(rect.height),
-    };
-    const landing = await page.screenshot({ clip });
-    await flight.evaluate((node) => node.getAnimations().at(-1)!.finish());
-    await settled(page);
-    expect(await page.screenshot({ clip })).toEqual(landing);
   });
-});
+}
 
 test("an invalid drop flies back from its dragged angle without changing hand order or history", async ({
   page,

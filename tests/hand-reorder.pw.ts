@@ -242,7 +242,9 @@ test("reduced motion keeps the preview upright and attached to the pointer", asy
 
 test("real touch input reorders across wrapped rows and tapping still plays", async ({
   browser,
+  browserName,
 }) => {
+  test.skip(browserName !== "chromium", "Native touch injection requires CDP.");
   const context = await browser.newContext({
     hasTouch: true,
     isMobile: true,
@@ -254,6 +256,7 @@ test("real touch input reorders across wrapped rows and tapping still plays", as
   await expect(cards(page)).toHaveCount(7);
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(cards(page)).toHaveCount(8);
+  await expect(page.locator(".card-flight")).toHaveCount(0);
   const original = await order(page);
   const session = await context.newCDPSession(page);
   const source = await box(cards(page).first());
