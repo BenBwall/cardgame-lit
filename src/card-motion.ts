@@ -4,6 +4,7 @@ import type { GameState } from "./game-state.js";
 
 type Zone = "deck" | "hand" | "played";
 type FlipAxis = "X" | "Y";
+type DrawFlip = { axis: FlipAxis; startAngle: 180 | -180 };
 type Pose = {
   node: HTMLElement;
   x: number;
@@ -15,6 +16,7 @@ type Pose = {
   flying?: boolean;
   flip?: number;
   flipAxis?: FlipAxis;
+  flipStartAngle?: 180 | -180;
   shadow: string;
 };
 type Snapshot = {
@@ -50,7 +52,7 @@ export class CardMotion {
 
   constructor(
     private readonly root: () => DocumentFragment | HTMLElement,
-    private readonly drawFlipAxis: () => FlipAxis = () => "X",
+    private readonly drawFlip: () => DrawFlip = () => ({ axis: "X", startAngle: 180 }),
   ) {}
 
   connect(): void {
@@ -111,6 +113,11 @@ export class CardMotion {
           Math.PI
         : undefined,
       flipAxis: flipper ? flipAxis : undefined,
+      flipStartAngle: flipper
+        ? flipper.dataset.flipStartAngle === "-180"
+          ? -180
+          : 180
+        : undefined,
       shadow: getComputedStyle(node.querySelector(".flight-front") ?? node).boxShadow,
     };
   }
@@ -185,7 +192,7 @@ export class CardMotion {
           ...pile,
           node: to.node,
           angle: 0,
-          flip: previousZone === "deck" ? 180 : undefined,
+          flip: previousZone === "deck" ? this.drawFlip().startAngle : undefined,
         };
       }
       if (!target && previousZone === zone) continue;
@@ -262,14 +269,16 @@ export class CardMotion {
     target?.setAttribute("data-in-flight", "");
     const endAngle = to.angle;
     const duration = kind === "draw" ? 1200 : kind === "arrange" ? 560 : 840;
+    const flipStartAngle = from.flipStartAngle ?? this.drawFlip().startAngle;
     const flip =
       kind === "draw" || kind === "return-deck" || from.flip !== undefined
         ? this.flip(
             node,
             from.flip ?? 0,
-            kind === "return-deck" ? 180 : 0,
+            kind === "return-deck" ? flipStartAngle : 0,
             duration,
-            from.flipAxis ?? this.drawFlipAxis(),
+            from.flipAxis ?? this.drawFlip().axis,
+            flipStartAngle,
           )
         : undefined;
     const arc = kind === "draw" ? 45 : kind === "arrange" ? 8 : 24;
@@ -358,9 +367,11 @@ export class CardMotion {
     to: number,
     duration: number,
     axis: FlipAxis,
+    startAngle: 180 | -180,
   ): Animation {
     const flipper = node.querySelector<HTMLElement>(".flight-flipper")!;
     flipper.dataset.flipAxis = axis;
+    flipper.dataset.flipStartAngle = String(startAngle);
     const animation = flipper.animate(
       [{ transform: `rotate${axis}(${from}deg)` }, { transform: `rotate${axis}(${to}deg)` }],
       { duration, easing: "ease-in-out", fill: "both" },

@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { FoldHorizontal, FoldVertical, Grid3x3, PlayingCards } from "@lucide/icons";
+import { ArrowDown, ArrowUp, ArrowRight, ArrowLeft, Grid3x3, PlayingCards } from "@lucide/icons";
 import { buildLucideSvg } from "@lucide/icons/build";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -16,6 +16,13 @@ import { HandDrag } from "./hand-drag.js";
 import { CardMotion } from "./card-motion.js";
 import { fanLayout } from "./hand-layout.js";
 
+const flipOptions = [
+  { label: "Top to bottom", icon: ArrowDown, axis: "X", startAngle: 180 },
+  { label: "Bottom to top", icon: ArrowUp, axis: "X", startAngle: -180 },
+  { label: "Left to right", icon: ArrowRight, axis: "Y", startAngle: -180 },
+  { label: "Right to left", icon: ArrowLeft, axis: "Y", startAngle: 180 },
+] as const;
+
 /** Import this module once, then use <card-game> anywhere on a static page. */
 export class CardGame extends LitElement {
   static properties = {
@@ -25,7 +32,7 @@ export class CardGame extends LitElement {
     message: { state: true },
     confirmingReset: { state: true },
     handLayout: { state: true },
-    flipAxis: { state: true },
+    flipDirection: { state: true },
     handWidth: { state: true },
   };
 
@@ -35,12 +42,12 @@ export class CardGame extends LitElement {
   private message = "Draw a card to begin.";
   private confirmingReset = false;
   private handLayout: "fan" | "grid" = "fan";
-  private flipAxis: "X" | "Y" = "X";
+  private flipDirection = 0;
   private handWidth = 600;
   private resizeObserver?: ResizeObserver;
   private cardMotion = new CardMotion(
     () => this.renderRoot,
-    () => this.flipAxis,
+    () => flipOptions[this.flipDirection],
   );
   private handDrag = new HandDrag((id, destination, preview) => {
     void this.reorder(id, destination, preview);
@@ -233,29 +240,24 @@ export class CardGame extends LitElement {
   }
 
   private flipSwitch() {
-    return html`<div class="layout-switch" role="group" aria-label="Draw flip direction">
-      <button
-        type="button"
-        aria-label="Horizontal flip"
-        aria-pressed=${this.flipAxis === "X"}
-        @click=${() => {
-          this.flipAxis = "X";
-        }}
-      >
-        ${unsafeHTML(buildLucideSvg(FoldVertical, { hasA11yProp: false }))}
-        <span class="layout-tooltip" role="tooltip">Flip around horizontal axis</span>
-      </button>
-      <button
-        type="button"
-        aria-label="Vertical flip"
-        aria-pressed=${this.flipAxis === "Y"}
-        @click=${() => {
-          this.flipAxis = "Y";
-        }}
-      >
-        ${unsafeHTML(buildLucideSvg(FoldHorizontal, { hasA11yProp: false }))}
-        <span class="layout-tooltip" role="tooltip">Flip around vertical axis</span>
-      </button>
+    return html`<div
+      class="layout-switch flip-switch"
+      role="group"
+      aria-label="Draw flip direction"
+    >
+      ${flipOptions.map(
+        (option, index) => html`<button
+          type="button"
+          aria-label=${option.label}
+          aria-pressed=${this.flipDirection === index}
+          @click=${() => {
+            this.flipDirection = index;
+          }}
+        >
+          ${unsafeHTML(buildLucideSvg(option.icon, { hasA11yProp: false }))}
+          <span class="layout-tooltip" role="tooltip">${option.label}</span>
+        </button>`,
+      )}
     </div>`;
   }
 
@@ -749,6 +751,20 @@ export class CardGame extends LitElement {
     }
     .layout-switch:has(button:nth-child(2)[aria-pressed="true"])::before {
       transform: translateX(calc(100% + 0.125rem));
+    }
+    .flip-switch {
+      display: inline-grid;
+      grid-template-columns: repeat(2, 2.5rem);
+    }
+    .flip-switch::before {
+      bottom: auto;
+      height: 2.5rem;
+    }
+    .flip-switch:has(button:nth-child(3)[aria-pressed="true"])::before {
+      transform: translateY(calc(100% + 0.125rem));
+    }
+    .flip-switch:has(button:nth-child(4)[aria-pressed="true"])::before {
+      transform: translate(calc(100% + 0.125rem), calc(100% + 0.125rem));
     }
     .layout-switch button {
       display: grid;

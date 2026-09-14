@@ -6,7 +6,7 @@ const settled = (page: Page) => expect(flights(page)).toHaveCount(0);
 const draw = async (page: Page, count = 1) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Grid layout", exact: true }).click();
-  await page.getByRole("button", { name: "Vertical flip", exact: true }).click();
+  await page.getByRole("button", { name: "Right to left", exact: true }).click();
   for (let i = 0; i < count; i++) await page.getByRole("button", { name: "Draw a card" }).click();
 };
 
