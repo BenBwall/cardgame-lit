@@ -1,0 +1,29 @@
+{
+  "name": "@benbwall/cardgame-lit",
+  "version": "1.0.0",
+  "description": "A local single-player card table, ported from BenBwall/cardgame to Lit.",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc && bun scripts/build-demo.ts",
+    "check": "tsc --noEmit",
+    "test": "bun test tests"
+  },
+  "devDependencies": {
+    "lit": "^3.3.3",
+    "typescript": "^6.0.3"
+  },
+  "peerDependencies": {
+    "lit": "^3.3.3"
+  },
+  "packageManager": "bun@1.4.2"
+}
