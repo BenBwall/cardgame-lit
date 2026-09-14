@@ -20,6 +20,18 @@ const beginDrag = async (page: Page, source: Locator) => {
   await page.mouse.down();
   await page.mouse.move(rect.x + rect.width / 2 + 10, rect.y + rect.height / 2, { steps: 3 });
 };
+const grabAt = async (page: Page, source: Locator, gripX: number, gripY: number) => {
+  await source.scrollIntoViewIfNeeded();
+  await source.hover();
+  // Measure after the hover lift so the intended grab point is exact.
+  await page.waitForTimeout(150);
+  const rect = await box(source);
+  const x = rect.x + rect.width * gripX;
+  const y = rect.y + rect.height * gripY;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  return { x, y };
+};
 const drag = async (page: Page, source: Locator, target: Locator, after = true) => {
   await beginDrag(page, source);
   const rect = await box(target);
@@ -117,10 +129,7 @@ test("drag preview leans in both directions and settles while the pointer is hel
   await draw(page);
   const original = await order(page);
   const source = cards(page).nth(2);
-  await beginDrag(page, source);
-  const rect = await box(source);
-  const x = rect.x + rect.width / 2 + 10;
-  const y = rect.y + rect.height / 2;
+  const { x, y } = await grabAt(page, source, 0.5, 0.2);
   const angle = () =>
     page.locator(".drag-preview").evaluate((node) => {
       const matrix = new DOMMatrix(getComputedStyle(node).transform);
@@ -141,6 +150,38 @@ test("drag preview leans in both directions and settles while the pointer is hel
   await page.keyboard.press("Escape");
   await page.mouse.up();
   await expect(page.locator(".drag-preview")).toHaveCount(0);
+});
+
+test("grab position controls rotation for horizontal, vertical, and diagonal pulls", async ({
+  page,
+}) => {
+  await draw(page);
+  const original = await order(page);
+  const cases = [
+    { gripX: 0.5, gripY: 0.2, dx: 5, dy: 0, sign: 1 },
+    { gripX: 0.5, gripY: 0.8, dx: 5, dy: 0, sign: -1 },
+    { gripX: 0.2, gripY: 0.5, dx: 0, dy: 5, sign: -1 },
+    { gripX: 0.8, gripY: 0.5, dx: 0, dy: 5, sign: 1 },
+    { gripX: 0.2, gripY: 0.2, dx: 5, dy: -5, sign: 1 },
+    { gripX: 0.5, gripY: 0.5, dx: 5, dy: 5, sign: 0 },
+  ];
+  for (const { gripX, gripY, dx, dy, sign } of cases) {
+    const { x, y } = await grabAt(page, cards(page).nth(2), gripX, gripY);
+    for (let step = 1; step <= 20; step++) {
+      await page.mouse.move(x + step * dx, y + step * dy);
+      await page.waitForTimeout(16);
+    }
+    const angle = await page.locator(".drag-preview").evaluate((node) => {
+      const matrix = new DOMMatrix(getComputedStyle(node).transform);
+      return (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
+    });
+    if (sign === 0) expect(Math.abs(angle)).toBeLessThan(0.2);
+    else expect(angle * sign).toBeGreaterThan(3);
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    await expect(page.locator(".drag-preview")).toHaveCount(0);
+    expect(await order(page)).toEqual(original);
+  }
 });
 
 test("reduced motion keeps the preview upright and attached to the pointer", async ({ page }) => {

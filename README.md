@@ -24,7 +24,7 @@ Browser tests use Microsoft Edge and a local test server, and cover mouse and to
 
 Drag a card to the marked insertion point to reorder your hand with a mouse, touch, or pen. The hand switches to **Manual order**; drawing adds cards at the end of your arrangement. Selecting **Draw order** restores the original draw sequence, and you can switch back to your manual arrangement. **Undo** restores the previous arrangement and sort selection. Drop outside the hand or press Escape to cancel.
 
-While dragging, the card follows with a little inertia, leans into horizontal movement, and settles upright when you pause. With reduced motion enabled, it stays upright and follows the pointer directly.
+While dragging, the card follows with a little inertia and swings around your grab point. Pulling from opposite edges produces opposite rotation, corners react to both horizontal and vertical movement, and a centered grip stays level. It settles upright when you pause. With reduced motion enabled, it stays upright and follows the pointer directly.
 
 Click or tap a card to play it. For keyboard reordering, focus a card and use **Alt + Left/Right**, or **Alt + Home/End** to move it to the first/last position. Enter and Space still play the focused card.
 

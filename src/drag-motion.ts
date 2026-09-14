@@ -1,6 +1,6 @@
 const clamp = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value));
 
-/** A light spring follows the pointer; horizontal lag makes the card lean. */
+/** A light spring follows the pointer; pulling off-center creates torque. */
 export class DragMotion {
   angle = 0;
   private velocityX = 0;
@@ -10,6 +10,8 @@ export class DragMotion {
   constructor(
     public x: number,
     public y: number,
+    private readonly gripX: number,
+    private readonly gripY: number,
   ) {}
 
   step(targetX: number, targetY: number, elapsed: number, reducedMotion = false): void {
@@ -25,7 +27,10 @@ export class DragMotion {
     let remaining = Math.min(Math.max(elapsed, 0), 0.05);
     while (remaining > 0) {
       const dt = Math.min(remaining, 1 / 120);
-      const lean = clamp((targetX - this.x) * 0.65, 18);
+      // The grab point is relative to the center, normalized to each half-size.
+      // Opposite edges swing oppositely; a centered grip produces no torque.
+      const torque = this.gripX * (targetY - this.y) - this.gripY * (targetX - this.x);
+      const lean = clamp(torque * 0.85, 18);
       this.velocityX += ((targetX - this.x) * 650 - this.velocityX * 40) * dt;
       this.velocityY += ((targetY - this.y) * 650 - this.velocityY * 40) * dt;
       this.angularVelocity += ((lean - this.angle) * 220 - this.angularVelocity * 22) * dt;

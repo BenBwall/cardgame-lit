@@ -44,7 +44,12 @@ export class HandDrag {
       offsetY: event.clientY - rect.top,
       targetX: rect.left,
       targetY: rect.top,
-      motion: new DragMotion(rect.left, rect.top),
+      motion: new DragMotion(
+        rect.left,
+        rect.top,
+        ((event.clientX - rect.left) / rect.width - 0.5) * 2,
+        ((event.clientY - rect.top) / rect.height - 0.5) * 2,
+      ),
     };
     source.setPointerCapture(event.pointerId);
     window.addEventListener("blur", this.cancel);
