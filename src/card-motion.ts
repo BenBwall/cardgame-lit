@@ -205,7 +205,7 @@ export class CardMotion {
           { transform: "rotate(-5deg)" },
           { transform: "rotate(0deg)" },
         ],
-        { duration: 500, easing: "ease-in-out" },
+        { duration: 1000, easing: "ease-in-out" },
       );
     }
   }
@@ -247,7 +247,7 @@ export class CardMotion {
     node.dataset.flightKind = kind;
     target?.setAttribute("data-in-flight", "");
     const endAngle = to.angle;
-    const duration = kind === "draw" ? 600 : kind === "arrange" ? 280 : 420;
+    const duration = kind === "draw" ? 1200 : kind === "arrange" ? 560 : 840;
     const flip =
       kind === "draw" || kind === "return-deck" || from.flip !== undefined
         ? this.flip(node, from.flip ?? 0, kind === "return-deck" ? 180 : 0, duration)

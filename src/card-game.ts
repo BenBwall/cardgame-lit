@@ -596,7 +596,7 @@ export class CardGame extends LitElement {
       z-index: 101;
     }
     .hand > li > .card {
-      transition: transform 120ms ease;
+      transition: transform 240ms ease;
       will-change: transform;
       position: relative;
       touch-action: none;
