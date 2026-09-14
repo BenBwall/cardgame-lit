@@ -5,6 +5,7 @@ const flights = (page: Page) => page.locator(".card-flight");
 const settled = (page: Page) => expect(flights(page)).toHaveCount(0);
 const draw = async (page: Page, count = 1) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "Grid layout", exact: true }).click();
   for (let i = 0; i < count; i++) await page.getByRole("button", { name: "Draw a card" }).click();
 };
 
@@ -59,6 +60,7 @@ for (const width of [1280, 420]) {
   test(`new draws leave every earlier animation untouched at width ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1300 });
     await page.goto("/");
+    await page.getByRole("button", { name: "Grid layout", exact: true }).click();
     const result = await page.locator("card-game").evaluate(async (host) => {
       const root = host.shadowRoot!;
       const drawNext = async () => {
@@ -150,6 +152,7 @@ test("interrupted draws preserve fractional card and text geometry at landing", 
   page,
 }) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "Grid layout", exact: true }).click();
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "17px";
   });

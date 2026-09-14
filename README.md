@@ -24,6 +24,8 @@ Cards animate between their actual positions: draws start face down and flip aro
 
 ## Arrange your hand
 
+Hands start in **Fan layout**, with overlapping cards arranged along an arc. The two icon buttons switch between **Fan layout** and **Grid layout**; hovering or focusing an icon shows its label. Larger hands form multiple fans so exposed card edges remain selectable on narrow screens. Switching layouts preserves the cards, their order, and undo history. Expanding or rearranging a fan adjusts moving cards' destinations without restarting their animation clocks or flips.
+
 Drag a card to the marked insertion point to reorder your hand with a mouse, touch, or pen. The hand switches to **Manual order**; drawing adds cards at the end of your arrangement. Selecting **Draw order** restores the original draw sequence, and you can switch back to your manual arrangement. **Undo** restores the previous arrangement and sort selection. Drop outside the hand or press Escape to cancel.
 
 While dragging, the card follows with a little inertia and swings around your grab point. The free side hangs lower when you grab a side or corner, so left and right grips look different even during slow horizontal drags. Movement adds a stronger swing; when you pause, it settles into that hanging angle. A centered grip stays level. With reduced motion enabled, it stays upright and follows the pointer directly.

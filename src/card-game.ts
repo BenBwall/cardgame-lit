@@ -11,6 +11,7 @@ import {
 } from "./game-state.js";
 import { HandDrag } from "./hand-drag.js";
 import { CardMotion } from "./card-motion.js";
+import { fanLayout } from "./hand-layout.js";
 
 /** Import this module once, then use <card-game> anywhere on a static page. */
 export class CardGame extends LitElement {
@@ -20,6 +21,8 @@ export class CardGame extends LitElement {
     sortOrder: { state: true },
     message: { state: true },
     confirmingReset: { state: true },
+    handLayout: { state: true },
+    handWidth: { state: true },
   };
 
   private game: GameState | undefined;
@@ -27,6 +30,9 @@ export class CardGame extends LitElement {
   private sortOrder: SortOrder = "draw-order";
   private message = "Draw a card to begin.";
   private confirmingReset = false;
+  private handLayout: "fan" | "grid" = "fan";
+  private handWidth = 600;
+  private resizeObserver?: ResizeObserver;
   private cardMotion = new CardMotion(() => this.renderRoot);
   private handDrag = new HandDrag((id, destination, preview) => {
     void this.reorder(id, destination, preview);
@@ -37,11 +43,21 @@ export class CardGame extends LitElement {
     super.connectedCallback();
     this.game ??= newGame();
     this.cardMotion.connect();
+    void this.updateComplete.then(() => {
+      if (!this.isConnected) return;
+      this.resizeObserver ??= new ResizeObserver(([entry]) => {
+        if (Math.abs(this.handWidth - entry.contentRect.width) < 0.5) return;
+        this.cardMotion.finish();
+        this.handWidth = entry.contentRect.width;
+      });
+      this.resizeObserver.observe(this.renderRoot.querySelector(".game")!);
+    });
   }
 
   disconnectedCallback(): void {
     this.handDrag.dispose();
     this.cardMotion.disconnect();
+    this.resizeObserver?.disconnect();
     super.disconnectedCallback();
   }
 
@@ -185,10 +201,57 @@ export class CardGame extends LitElement {
     </span>`;
   }
 
+  private layoutSwitch() {
+    return html`<div class="layout-switch" role="group" aria-label="Hand layout">
+      <button
+        type="button"
+        aria-label="Fan layout"
+        aria-pressed=${this.handLayout === "fan"}
+        @click=${() => this.setLayout("fan")}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="8" y="4" width="8" height="15" rx="1.5" transform="rotate(-28 12 19)" />
+          <rect x="8" y="4" width="8" height="15" rx="1.5" transform="rotate(28 12 19)" />
+          <rect x="8" y="4" width="8" height="15" rx="1.5" />
+        </svg>
+        <span class="layout-tooltip" role="tooltip">Fan layout</span>
+      </button>
+      <button
+        type="button"
+        aria-label="Grid layout"
+        aria-pressed=${this.handLayout === "grid"}
+        @click=${() => this.setLayout("grid")}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="4" y="3" width="6" height="7" rx="1" />
+          <rect x="14" y="3" width="6" height="7" rx="1" />
+          <rect x="4" y="14" width="6" height="7" rx="1" />
+          <rect x="14" y="14" width="6" height="7" rx="1" />
+        </svg>
+        <span class="layout-tooltip" role="tooltip">Grid layout</span>
+      </button>
+    </div>`;
+  }
+
+  private setLayout(layout: "fan" | "grid"): void {
+    if (layout === this.handLayout) return;
+    this.animateChange(() => {
+      this.handLayout = layout;
+    });
+  }
+
   protected render() {
     if (!this.game) return nothing;
     const { deck, hand, played } = this.game;
     const top = played.at(-1);
+    const fan =
+      this.handLayout === "fan"
+        ? fanLayout(
+            hand.length,
+            this.handWidth,
+            parseFloat(getComputedStyle(document.documentElement).fontSize) / 16,
+          )
+        : undefined;
     return html` <div class="game" aria-label="Single-player card table">
       <div class="toolbar">
         <p class="mode">Single player · Free play</p>
@@ -255,23 +318,26 @@ export class CardGame extends LitElement {
       </div>
       <div class="hand-heading">
         <h3>Your hand <span>(${hand.length})</span></h3>
-        <label
-          >Sort
-          <select
-            aria-label="Sort"
-            .value=${this.sortOrder}
-            @change=${(event: Event) => {
-              this.animateChange(() => {
-                this.sortOrder = (event.target as HTMLSelectElement).value as SortOrder;
-              });
-            }}
-          >
-            <option value="draw-order">Draw order</option>
-            <option value="manual">Manual order</option>
-            <option value="rank-then-suit">Rank, then suit</option>
-            <option value="suit-then-rank">Suit, then rank</option>
-          </select>
-        </label>
+        <div class="hand-controls">
+          ${this.layoutSwitch()}
+          <label
+            >Sort
+            <select
+              aria-label="Sort"
+              .value=${this.sortOrder}
+              @change=${(event: Event) => {
+                this.animateChange(() => {
+                  this.sortOrder = (event.target as HTMLSelectElement).value as SortOrder;
+                });
+              }}
+            >
+              <option value="draw-order">Draw order</option>
+              <option value="manual">Manual order</option>
+              <option value="rank-then-suit">Rank, then suit</option>
+              <option value="suit-then-rank">Suit, then rank</option>
+            </select>
+          </label>
+        </div>
       </div>
       <p class="hand-help" id="hand-help">
         Drag cards to rearrange them. Click to play. With a card focused, use Alt + Left/Right to
@@ -281,6 +347,8 @@ export class CardGame extends LitElement {
         hand.length
           ? html`<ul
               class="hand"
+              data-layout=${this.handLayout}
+              style=${fan ? `height:${fan.height}px` : ""}
               aria-label="Your hand"
               @pointerdown=${(event: PointerEvent) => {
                 const card = (event.target as Element).closest<HTMLElement>("[data-card-id]");
@@ -296,13 +364,17 @@ export class CardGame extends LitElement {
               ${repeat(
                 handCards(this.game, this.sortOrder),
                 cardId,
-                (card) => html`<li>
+                (card, index) => html`<li
+                  style=${fan ? `--fan-x:${fan.slots[index].x}px;--fan-y:${fan.slots[index].y}px;--fan-order:${index}` : ""}
+                >
                   <button
                     class="card card-shell"
                     type="button"
                     data-suit=${card.suit}
                     data-card-id=${cardId(card)}
                     data-motion-id=${cardId(card)}
+                    data-rest-angle=${fan?.slots[index].angle ?? 0}
+                    style=${`--card-angle:${fan?.slots[index].angle ?? 0}deg`}
                     aria-describedby="hand-help"
                     aria-label=${`Play ${cardName(card)}`}
                     @click=${(event: MouseEvent) => {
@@ -358,6 +430,7 @@ export class CardGame extends LitElement {
     }
     .toolbar,
     .controls,
+    .hand-controls,
     .hand-heading,
     .reset {
       display: flex;
@@ -508,6 +581,25 @@ export class CardGame extends LitElement {
       margin: 1rem 0;
       padding: 0;
       list-style: none;
+      isolation: isolate;
+    }
+    .hand[data-layout="fan"] {
+      display: block;
+      position: relative;
+      --hover-lift: 1rem;
+    }
+    .hand[data-layout="fan"] > li {
+      position: absolute;
+      left: var(--fan-x);
+      top: var(--fan-y);
+      z-index: var(--fan-order);
+    }
+    .hand > li:has([data-in-flight]) {
+      z-index: 100;
+    }
+    .hand > li:has(button:hover),
+    .hand > li:focus-within {
+      z-index: 101;
     }
     .hand > li > .card {
       transition: transform 120ms ease;
@@ -516,6 +608,7 @@ export class CardGame extends LitElement {
       touch-action: none;
       user-select: none;
       cursor: grab;
+      transform: rotate(var(--card-angle, 0deg));
     }
     .hand-help {
       font-size: 0.875rem;
@@ -523,7 +616,7 @@ export class CardGame extends LitElement {
       line-height: 1.5;
     }
     .hand[data-dragging] > li > .card {
-      transform: none;
+      transform: rotate(var(--card-angle, 0deg));
       cursor: grabbing;
     }
     .hand > li > .card[data-drag-source] {
@@ -595,15 +688,63 @@ export class CardGame extends LitElement {
     }
     .hand > li > .card:hover,
     .hand > li > .card:focus-visible {
-      transform: translateY(-0.25rem);
+      transform: translateY(calc(-1 * var(--hover-lift, 0.25rem))) rotate(var(--card-angle, 0deg));
     }
     .hand[data-dragging] > li > .card:hover,
     .hand[data-dragging] > li > .card:focus-visible {
-      transform: none;
+      transform: rotate(var(--card-angle, 0deg));
     }
     .hand > li > .card[data-in-flight] {
-      transform: none;
+      transform: rotate(var(--card-angle, 0deg));
       transition: none;
+    }
+    .layout-switch {
+      display: inline-flex;
+      gap: 0.125rem;
+      padding: 0.125rem;
+      border: 1px solid var(--color-border, #d0d8d0);
+      border-radius: 0.625rem;
+    }
+    .layout-switch button {
+      display: grid;
+      place-items: center;
+      position: relative;
+      width: 2.5rem;
+      min-height: 2.5rem;
+      padding: 0.375rem;
+      border: 0;
+      background: transparent;
+      color: var(--color-muted, #506050);
+    }
+    .layout-switch button[aria-pressed="true"] {
+      background: var(--color-hover, #e9efe7);
+      color: var(--color-text, #202820);
+    }
+    .layout-switch svg {
+      width: 1.5rem;
+      height: 1.5rem;
+      fill: var(--color-surface, #f7f9f5);
+      stroke: currentColor;
+      stroke-width: 1.5;
+    }
+    .layout-tooltip {
+      position: absolute;
+      top: calc(100% + 0.5rem);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 200;
+      padding: 0.375rem 0.625rem;
+      border-radius: 0.375rem;
+      color: var(--color-background, #fff);
+      background: var(--color-text, #202820);
+      font-size: 0.75rem;
+      white-space: nowrap;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .layout-switch button:hover .layout-tooltip,
+    .layout-switch button:focus-visible .layout-tooltip {
+      visibility: visible;
     }
     .empty-hand {
       padding-block: 1rem;

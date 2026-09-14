@@ -1,4 +1,5 @@
 import { cardId } from "./cards.js";
+import { cardGeometry } from "./card-geometry.js";
 import type { GameState } from "./game-state.js";
 
 type Zone = "deck" | "hand" | "played";
@@ -35,7 +36,12 @@ export class CardMotion {
   private version = 0;
   private flights = new Map<
     string,
-    { node: HTMLElement; stop: () => void; anchor: { x: number; y: number } }
+    {
+      node: HTMLElement;
+      stop: () => void;
+      retarget: (from: Pose, to: Pose) => void;
+      anchor: { x: number; y: number; angle: number };
+    }
   >();
   private shuffle?: Animation;
   private preference?: MediaQueryList;
@@ -69,42 +75,26 @@ export class CardMotion {
 
   private destination(node: HTMLElement): Pose {
     const pose = this.pose(node);
-    // Measure layout independently of the card's current translation and lean.
-    const style = getComputedStyle(node);
-    const matrix = new DOMMatrix(style.transform);
-    const [ox, oy] = style.transformOrigin.split(" ").map(parseFloat);
-    pose.width = parseFloat(style.width);
-    pose.height = parseFloat(style.height);
-    const corners = [
-      [0, 0],
-      [pose.width, 0],
-      [0, pose.height],
-      [pose.width, pose.height],
-    ];
-    pose.x -=
-      matrix.e +
-      Math.min(...corners.map(([x, y]) => matrix.a * (x - ox) + matrix.c * (y - oy) + ox));
-    pose.y -=
-      matrix.f +
-      Math.min(...corners.map(([x, y]) => matrix.b * (x - ox) + matrix.d * (y - oy) + oy));
+    const matrix = new DOMMatrix(getComputedStyle(node).transform);
+    pose.x -= matrix.e;
+    pose.y -= matrix.f;
+    pose.angle = Number(node.dataset.restAngle ?? 0);
+    pose.origin = "50% 50%";
     return pose;
   }
 
-  private pose(node: HTMLElement, flying = false, anchor?: { x: number; y: number }): Pose {
-    const rect = node.getBoundingClientRect();
-    const style = getComputedStyle(node);
-    const matrix = new DOMMatrix(style.transform);
+  private pose(node: HTMLElement, flying = false): Pose {
+    const geometry = cardGeometry(node);
     const flipper = flying ? node.querySelector<HTMLElement>(".flight-flipper") : null;
     const flipMatrix = flipper ? new DOMMatrix(getComputedStyle(flipper).transform) : undefined;
     return {
       node: node.cloneNode(true) as HTMLElement,
-      x: flying ? (anchor?.x ?? parseFloat(style.left)) + matrix.e : rect.left,
-      y: flying ? (anchor?.y ?? parseFloat(style.top)) + matrix.f : rect.top,
-      // offsetWidth/Height round away subpixels each time a flight is interrupted.
-      width: flying ? parseFloat(style.width) : rect.width,
-      height: flying ? parseFloat(style.height) : rect.height,
-      angle: flying ? (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI : 0,
-      origin: flying ? style.transformOrigin : "50% 50%",
+      x: geometry.x,
+      y: geometry.y,
+      width: geometry.width,
+      height: geometry.height,
+      angle: geometry.angle,
+      origin: geometry.origin,
       flying,
       flip: flipMatrix ? (Math.atan2(-flipMatrix.m13, flipMatrix.m11) * 180) / Math.PI : undefined,
       shadow: getComputedStyle(node.querySelector(".flight-front") ?? node).boxShadow,
@@ -117,8 +107,7 @@ export class CardMotion {
     for (const node of root.querySelectorAll<HTMLElement>("[data-motion-id]"))
       cards.set(node.dataset.motionId!, this.pose(node, node.classList.contains("drag-preview")));
     // Continue interrupted flights from what is actually on screen, not their destinations.
-    for (const [id, flight] of this.flights)
-      cards.set(id, this.pose(flight.node, true, flight.anchor));
+    for (const [id, flight] of this.flights) cards.set(id, this.pose(flight.node, true));
     if (released?.dataset.motionId) cards.set(released.dataset.motionId, this.pose(released, true));
     const deck = root.querySelector<HTMLElement>("#draw-card");
     const played = root.querySelector<HTMLElement>(".played-pile .card");
@@ -161,9 +150,14 @@ export class CardMotion {
         const sameDestination =
           previousZone === zone &&
           (target === active.node || (!target && active.node.hasAttribute("data-flight-ghost"))) &&
-          Math.hypot(active.anchor.x - to.x, active.anchor.y - to.y) < 0.1;
+          Math.hypot(active.anchor.x - to.x, active.anchor.y - to.y) < 0.1 &&
+          Math.abs(active.anchor.angle - to.angle) < 0.1;
         // Unrelated updates must not touch the animation objects, time, or easing.
         if (sameDestination) continue;
+        if (previousZone === zone && target === active.node && from) {
+          active.retarget(from, to);
+          continue;
+        }
         active.stop();
         // Capture resting styles after stopping only this affected card.
         to.shadow = getComputedStyle(
@@ -182,7 +176,13 @@ export class CardMotion {
       }
       if (!target && previousZone === zone) continue;
       const changedZone = previousZone !== zone;
-      if (!changedZone && !from.flying && Math.hypot(from.x - to.x, from.y - to.y) < 1) continue;
+      if (
+        !changedZone &&
+        !from.flying &&
+        Math.hypot(from.x - to.x, from.y - to.y) < 1 &&
+        Math.abs(from.angle - to.angle) < 0.1
+      )
+        continue;
       const kind =
         previousZone === "deck"
           ? "draw"
@@ -246,7 +246,7 @@ export class CardMotion {
     node.dataset.flightId = id;
     node.dataset.flightKind = kind;
     target?.setAttribute("data-in-flight", "");
-    const endAngle = 0;
+    const endAngle = to.angle;
     const duration = kind === "draw" ? 600 : kind === "arrange" ? 280 : 420;
     const flip =
       kind === "draw" || kind === "return-deck" || from.flip !== undefined
@@ -255,7 +255,10 @@ export class CardMotion {
     const arc = kind === "draw" ? 45 : kind === "arrange" ? 8 : 24;
     const animation = node.animate(
       [
-        { transform: transform(from.x - to.x, from.y - to.y, from.angle) },
+        {
+          transform: transform(from.x - to.x, from.y - to.y, from.angle),
+          transformOrigin: from.origin,
+        },
         {
           transform: transform(
             (from.x - to.x) / 2,
@@ -264,7 +267,7 @@ export class CardMotion {
           ),
           offset: 0.5,
         },
-        { transform: transform(0, 0, endAngle) },
+        { transform: transform(0, 0, endAngle), transformOrigin: to.origin },
       ],
       { duration, easing: "cubic-bezier(.2,.7,.25,1)", fill: "both" },
     );
@@ -291,7 +294,40 @@ export class CardMotion {
       flip?.cancel();
       for (const shadow of shadows) shadow.cancel();
     };
-    const flight = { node, stop, anchor: { x: to.x, y: to.y } };
+    const retarget = (current: Pose, destination: Pose) => {
+      const effect = animation.effect as KeyframeEffect;
+      const progress = Number(effect.getComputedTiming().progress ?? 0);
+      if (progress >= 1) {
+        stop();
+        this.fly(id, current, destination, target, "arrange");
+        return;
+      }
+      const frames = effect
+        .getKeyframes()
+        .filter((frame) => Math.abs(frame.computedOffset - progress) > 0.00001)
+        .map((frame) => {
+          const fraction = Math.max(0, (frame.computedOffset - progress) / (1 - progress));
+          const matrix = new DOMMatrix(String(frame.transform));
+          const angle = (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
+          return {
+            offset: frame.computedOffset,
+            transform: transform(
+              matrix.e + (flight.anchor.x - destination.x) * (1 - fraction),
+              matrix.f + (flight.anchor.y - destination.y) * (1 - fraction),
+              angle + (destination.angle - flight.anchor.angle) * fraction,
+            ),
+            transformOrigin: String(frame.transformOrigin ?? destination.origin),
+          };
+        });
+      frames.push({
+        offset: progress,
+        transform: transform(current.x - destination.x, current.y - destination.y, current.angle),
+        transformOrigin: current.origin,
+      });
+      effect.setKeyframes(frames.sort((a, b) => a.offset - b.offset));
+      flight.anchor = { x: destination.x, y: destination.y, angle: destination.angle };
+    };
+    const flight = { node, stop, retarget, anchor: { x: to.x, y: to.y, angle: to.angle } };
     this.flights.set(id, flight);
     void animation.finished.then(stop, stop);
   }

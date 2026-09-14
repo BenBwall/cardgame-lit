@@ -1,4 +1,5 @@
 import { DragMotion } from "./drag-motion.js";
+import { cardGeometry } from "./card-geometry.js";
 
 const DRAG_DISTANCE = 6;
 
@@ -39,24 +40,31 @@ export class HandDrag {
     const source = (event.target as Element).closest<HTMLButtonElement>("button[data-card-id]");
     const hand = event.currentTarget as HTMLElement;
     if (!source || !hand.contains(source)) return;
-    const rect = source.getBoundingClientRect();
+    const pose = cardGeometry(source);
+    const dx = event.clientX - pose.x - pose.ox;
+    const dy = event.clientY - pose.y - pose.oy;
+    const offsetX = pose.matrix.a * dx + pose.matrix.b * dy + pose.ox;
+    const offsetY = pose.matrix.c * dx + pose.matrix.d * dy + pose.oy;
+    const x = event.clientX - offsetX;
+    const y = event.clientY - offsetY;
     this.drag = {
       pointerId: event.pointerId,
       source,
       hand,
       startX: event.clientX,
       startY: event.clientY,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
-      targetX: rect.left,
-      targetY: rect.top,
+      offsetX,
+      offsetY,
+      targetX: x,
+      targetY: y,
       motion: new DragMotion(
-        rect.left,
-        rect.top,
-        ((event.clientX - rect.left) / rect.width - 0.5) * 2,
-        ((event.clientY - rect.top) / rect.height - 0.5) * 2,
+        x,
+        y,
+        (offsetX / pose.width - 0.5) * 2,
+        (offsetY / pose.height - 0.5) * 2,
       ),
     };
+    this.drag.motion.angle = pose.angle;
     source.setPointerCapture(event.pointerId);
     window.addEventListener("blur", this.cancel);
   };

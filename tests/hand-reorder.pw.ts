@@ -10,6 +10,7 @@ const box = async (locator: Locator) => {
 };
 const draw = async (page: Page, count = 5) => {
   await page.goto("/");
+  await page.getByRole("button", { name: "Grid layout", exact: true }).click();
   for (let index = 0; index < count; index++)
     await page.getByRole("button", { name: "Draw a card" }).click();
 };
