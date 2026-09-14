@@ -4,6 +4,8 @@
   "description": "A local single-player card table, ported from BenBwall/cardgame to Lit.",
   "files": [
     "dist",
+    "licenses",
+    "CARD-ART-LICENSES.md",
     "README.md"
   ],
   "type": "module",

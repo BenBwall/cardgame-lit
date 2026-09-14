@@ -25,7 +25,14 @@ const grabAt = async (page: Page, source: Locator, gripX: number, gripY: number)
   await source.scrollIntoViewIfNeeded();
   await source.hover();
   // Measure after the hover lift so the intended grab point is exact.
-  await page.waitForTimeout(150);
+  await expect
+    .poll(() =>
+      source.evaluate(
+        (node) =>
+          node.getAnimations().filter((animation) => animation.playState === "running").length,
+      ),
+    )
+    .toBe(0);
   const rect = await box(source);
   const x = rect.x + rect.width * gripX;
   const y = rect.y + rect.height * gripY;
@@ -156,6 +163,8 @@ test("drag preview leans in both directions and settles while the pointer is hel
 test("grab position controls rotation for horizontal, vertical, and diagonal pulls", async ({
   page,
 }) => {
+  // Leave room for the complete 100px pull below the hand, including the game selector.
+  await page.setViewportSize({ width: 1280, height: 1000 });
   await draw(page);
   const original = await order(page);
   const cases = [
@@ -181,7 +190,9 @@ test("grab position controls rotation for horizontal, vertical, and diagonal pul
       const matrix = new DOMMatrix(getComputedStyle(node).transform);
       return (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
     });
-    if (sign === 0) expect(Math.abs(angle)).toBeLessThan(0.2);
+    // Firefox rounds pointer coordinates to whole CSS pixels. A requested center
+    // at y=699.98 arrives at y=699, so allow the small tilt from that real offset.
+    if (sign === 0) expect(Math.abs(angle)).toBeLessThan(1);
     else expect((angle - restingAngle) * sign).toBeGreaterThan(10);
     await page.keyboard.press("Escape");
     await page.mouse.up();

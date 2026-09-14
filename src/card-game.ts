@@ -1,9 +1,22 @@
-import { LitElement, css, html, nothing } from "lit";
+import { cardTableStyles } from "./card-table-styles.js";
+import { LitElement, html, nothing } from "lit";
 import { ArrowDown, ArrowUp, ArrowRight, ArrowLeft, Grid3x3, PlayingCards } from "@lucide/icons";
 import { buildLucideSvg } from "@lucide/icons/build";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { type Card, type SortOrder, SUIT_SYMBOLS, cardId, cardName } from "./cards.js";
+import { type Card, type SortOrder, cardId, cardName } from "./cards.js";
+import {
+  type CardArtwork,
+  defaultArtwork,
+  isArtwork,
+  applyArtwork,
+  faceContents,
+  type BackAssignments,
+  newBackAssignments,
+  isBackAssignments,
+  cardBackStyle,
+} from "./card-art.js";
+import "./card-appearance.js";
 import {
   type GameState,
   drawCard,
@@ -16,6 +29,15 @@ import { HandDrag } from "./hand-drag.js";
 import { CardMotion } from "./card-motion.js";
 import { fanLayout } from "./hand-layout.js";
 import { HandSizeMotion } from "./hand-size-motion.js";
+import "./shithead-game.js";
+import {
+  gameStorageKey,
+  readSavedGame,
+  writeSavedGame,
+  isFreeGame,
+  isSortOrder,
+  record,
+} from "./saved-game.js";
 
 const flipOptions = [
   { label: "Top to bottom", icon: ArrowDown, axis: "X", startAngle: 180 },
@@ -27,6 +49,11 @@ const flipOptions = [
 /** Import this module once, then use <card-game> anywhere on a static page. */
 export class CardGame extends LitElement {
   static properties = {
+    storageKey: { attribute: "storage-key" },
+    artwork: { state: true },
+    artworkError: { state: true },
+    saveFailed: { state: true },
+    mode: { state: true },
     game: { state: true },
     history: { state: true },
     sortOrder: { state: true },
@@ -38,6 +65,13 @@ export class CardGame extends LitElement {
   };
 
   private game: GameState | undefined;
+  storageKey = "";
+  private artwork: CardArtwork = defaultArtwork();
+  private artworkError = "";
+  private backAssignments: BackAssignments = {};
+  private restored = false;
+  private saveFailed = false;
+  private mode: "free-play" | "shithead" = "free-play";
   private history: { game: GameState; sortOrder: SortOrder }[] = [];
   private sortOrder: SortOrder = "draw-order";
   private message = "Draw a card to begin.";
@@ -58,7 +92,43 @@ export class CardGame extends LitElement {
   // Randomness belongs to a browser instance, never the static build or shared state.
   connectedCallback(): void {
     super.connectedCallback();
+    this.storageKey ||= gameStorageKey(this, "table");
+    if (!this.restored) {
+      this.restored = true;
+      const art = readSavedGame(`${this.storageKey}:artwork`);
+      if (isArtwork(art)) this.artwork = art;
+      applyArtwork(this, this.artwork);
+      const saved = readSavedGame(this.storageKey);
+      this.backAssignments =
+        isFreeGame(saved?.game) && isBackAssignments(saved?.backAssignments)
+          ? saved.backAssignments
+          : newBackAssignments();
+      if (saved) {
+        if (isFreeGame(saved.game)) this.game = saved.game;
+        if (saved.mode === "shithead" || saved.mode === "free-play") this.mode = saved.mode;
+        if (isSortOrder(saved.sortOrder)) this.sortOrder = saved.sortOrder;
+        if (saved.handLayout === "fan" || saved.handLayout === "grid")
+          this.handLayout = saved.handLayout;
+        if (
+          Number.isInteger(saved.flipDirection) &&
+          Number(saved.flipDirection) >= 0 &&
+          Number(saved.flipDirection) < 4
+        )
+          this.flipDirection = Number(saved.flipDirection);
+        if (this.game && typeof saved.message === "string")
+          this.message = saved.message.slice(0, 4096);
+        if (this.game && Array.isArray(saved.history))
+          this.history = saved.history
+            .slice(-200)
+            .flatMap((entry) =>
+              record(entry) && isFreeGame(entry.game) && isSortOrder(entry.sortOrder)
+                ? [{ game: entry.game, sortOrder: entry.sortOrder }]
+                : [],
+            );
+      }
+    }
     this.game ??= newGame();
+    window.addEventListener("pagehide", this.save);
     this.cardMotion.connect();
     void this.updateComplete.then(() => {
       if (!this.isConnected) return;
@@ -73,12 +143,31 @@ export class CardGame extends LitElement {
   }
 
   disconnectedCallback(): void {
+    this.save();
+    window.removeEventListener("pagehide", this.save);
     this.handDrag.dispose();
     this.cardMotion.disconnect();
     this.resizeObserver?.disconnect();
     this.handSizeMotion.disconnect();
     super.disconnectedCallback();
   }
+
+  protected updated(): void {
+    this.save();
+  }
+  private save = (): void => {
+    if (!this.game || !this.storageKey) return;
+    this.saveFailed = !writeSavedGame(this.storageKey, {
+      game: this.game,
+      mode: this.mode,
+      sortOrder: this.sortOrder,
+      handLayout: this.handLayout,
+      flipDirection: this.flipDirection,
+      history: this.history.slice(-200),
+      message: this.message,
+      backAssignments: this.backAssignments,
+    });
+  };
 
   private animateChange(change: () => void, preview?: HTMLElement, shuffle = false): void {
     if (!this.game) return;
@@ -147,6 +236,7 @@ export class CardGame extends LitElement {
     this.animateChange(
       () => {
         this.game = newGame();
+        this.backAssignments = newBackAssignments();
         this.sortOrder = "draw-order";
         this.history = [];
         this.confirmingReset = false;
@@ -211,12 +301,10 @@ export class CardGame extends LitElement {
 
   private cardFace(card: Card) {
     return html`<span class="flight-flipper" aria-hidden="true">
-      <span class="card face flight-front" data-suit=${card.suit}>
-        <span class="rank">${card.rank}</span>
-        <span class="suit">${SUIT_SYMBOLS[card.suit]}</span>
-        <span class="rank bottom">${card.rank}</span>
-      </span>
-      <span class="card back flight-back">✦</span>
+      <span class="card face flight-front" data-suit=${card.suit}> ${faceContents(card)} </span>
+      <span class="card back flight-back" style=${cardBackStyle(card, this.backAssignments)}
+        >✦</span
+      >
     </span>`;
   }
 
@@ -274,6 +362,50 @@ export class CardGame extends LitElement {
 
   protected render() {
     if (!this.game) return nothing;
+    return html`<div class="game" aria-label="Single-player card table">
+      <label class="mode-select"
+        >Game
+        <select
+          aria-label="Game"
+          .value=${this.mode}
+          @change=${(event: Event) => {
+            this.handDrag.dispose();
+            this.cardMotion.finish();
+            this.handSizeMotion.disconnect();
+            this.mode = (event.target as HTMLSelectElement).value as "free-play" | "shithead";
+            void this.updateComplete.then(() => {
+              if (this.isConnected && this.mode === "free-play") this.handSizeMotion.connect();
+            });
+          }}
+        >
+          <option value="free-play">Free play</option>
+          <option value="shithead">Shithead · vs computer</option>
+        </select>
+      </label>
+      <card-appearance
+        .value=${this.artwork}
+        .saveError=${this.artworkError}
+        @artwork-change=${(event: CustomEvent<CardArtwork>) => {
+          if (!isArtwork(event.detail)) return;
+          if (!writeSavedGame(`${this.storageKey}:artwork`, event.detail)) {
+            this.artworkError =
+              "These images could not be saved. Browser storage may be full or unavailable. Your previous artwork is unchanged.";
+            return;
+          }
+          this.artworkError = "";
+          this.handDrag.dispose();
+          this.cardMotion.finish();
+          this.artwork = event.detail;
+          applyArtwork(this, this.artwork);
+        }}
+      ></card-appearance>
+      ${this.saveFailed ? html`<p>Browser storage is unavailable. This game cannot be saved.</p>` : nothing}
+      ${this.mode === "shithead" ? html`<shithead-game .storageKey=${`${this.storageKey}:shithead`} .randomBacks=${this.artwork.back === "wildlife"}></shithead-game>` : this.renderFreePlay()}
+    </div>`;
+  }
+
+  private renderFreePlay() {
+    if (!this.game) return nothing;
     const { deck, hand, played } = this.game;
     const top = played.at(-1);
     const fan =
@@ -284,7 +416,7 @@ export class CardGame extends LitElement {
             parseFloat(getComputedStyle(document.documentElement).fontSize) / 16,
           )
         : undefined;
-    return html` <div class="game" aria-label="Single-player card table">
+    return html`<div>
       <div class="toolbar">
         <p class="mode">Single player · Free play</p>
         <div class="controls">
@@ -321,6 +453,7 @@ export class CardGame extends LitElement {
         <div class="pile">
           <button
             id="draw-card"
+            style=${cardBackStyle(deck.at(-1), this.backAssignments)}
             class="card back"
             type="button"
             aria-label="Draw a card"
@@ -443,412 +576,12 @@ export class CardGame extends LitElement {
           pressing Escape cancels the drag. Manual order keeps your arrangement when drawing more
           cards. Alt + Home/End moves a focused card to the first/last position.
         </p>
-        <p>Your game stays in this tab and resets when you reload the page.</p>
+        <p>Your game and settings are saved in this browser and restored when you return.</p>
       </details>
     </div>`;
   }
 
-  static styles = css`
-    :host {
-      display: block;
-      min-width: 0;
-      color: var(--color-text, #202820);
-      font-family: inherit;
-    }
-    * {
-      box-sizing: border-box;
-    }
-    .game {
-      padding: clamp(1rem, 3vw, 2rem);
-      border: 1px solid var(--color-border, #d0d8d0);
-      border-radius: 1rem;
-      background: var(--color-surface, #f7f9f5);
-    }
-    .toolbar,
-    .controls,
-    .hand-controls,
-    .hand-heading,
-    .reset {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-    }
-    .toolbar,
-    .hand-heading {
-      justify-content: space-between;
-    }
-    .mode,
-    .status,
-    details,
-    .empty-hand {
-      color: var(--color-muted, #506050);
-    }
-    .mode {
-      margin: 0;
-      font-size: 0.875rem;
-    }
-    button,
-    select {
-      font: inherit;
-      color: inherit;
-      border: 1px solid var(--color-border-strong, #859585);
-      border-radius: 0.5rem;
-      background: var(--color-background, #fff);
-      padding: 0.5rem 0.75rem;
-      min-height: 2.75rem;
-    }
-    button,
-    summary,
-    select {
-      cursor: pointer;
-    }
-    button:disabled {
-      cursor: default;
-      opacity: 0.5;
-    }
-    button:hover:not(:disabled),
-    select:hover {
-      border-color: var(--color-text, #202820);
-    }
-    button:focus-visible,
-    select:focus-visible,
-    summary:focus-visible {
-      outline: 3px solid var(--color-primary, #386541);
-      outline-offset: 4px;
-    }
-    .reset {
-      margin-top: 1rem;
-      padding: 0.75rem;
-      border: 1px solid var(--color-border, #d0d8d0);
-      border-radius: 0.5rem;
-    }
-    .table {
-      display: flex;
-      justify-content: center;
-      gap: clamp(2rem, 8vw, 6rem);
-      margin-block: 1.5rem;
-      padding: 1.5rem 1rem;
-      border-radius: 0.75rem;
-      background: var(--color-hover, #e9efe7);
-    }
-    .pile {
-      display: grid;
-      justify-items: center;
-      gap: 0.75rem;
-      font-size: 0.875rem;
-    }
-    .pile strong {
-      margin-left: 0.25rem;
-      font-variant-numeric: tabular-nums;
-    }
-    .card {
-      width: 4.5rem;
-      height: 6.5rem;
-      padding: 0.375rem;
-      border-radius: 0.5rem;
-    }
-    .face {
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      color: #202820;
-      background: #fffdf8;
-      border: 1px solid #778273;
-      font-weight: 700;
-    }
-    .face[data-suit="Hearts"],
-    .face[data-suit="Diamonds"] {
-      color: #af2537;
-    }
-    .rank {
-      align-self: flex-start;
-      line-height: 1;
-      font-size: 1rem;
-    }
-    .suit {
-      align-self: center;
-      font-size: 1.75rem;
-      line-height: 1;
-    }
-    .bottom {
-      align-self: flex-end;
-      transform: rotate(180deg);
-    }
-    .back {
-      color: #fffdf8;
-      background: repeating-linear-gradient(
-        45deg,
-        #355342 0px,
-        #355342 5px,
-        #42634e 5px,
-        #42634e 7px
-      );
-      border: 3px double #d8e4d8;
-      font-size: 1.75rem;
-    }
-    .back:disabled {
-      font-size: 0.875rem;
-    }
-    .empty {
-      display: grid;
-      place-content: center;
-      text-align: center;
-      border: 1px dashed var(--color-border-strong, #859585);
-    }
-    h3 {
-      margin: 0;
-      font-size: 1rem;
-    }
-    h3 span {
-      font-weight: 400;
-    }
-    label {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      font-size: 0.875rem;
-    }
-    .hand-region {
-      margin: 1rem 0;
-    }
-    .hand-content {
-      display: flow-root;
-    }
-    .hand-content > .empty-hand {
-      margin: 0;
-    }
-    .hand {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.625rem;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-      isolation: isolate;
-    }
-    .hand[data-layout="fan"] {
-      display: block;
-      position: relative;
-      --hover-lift: 1rem;
-    }
-    .hand[data-layout="fan"] > li {
-      position: absolute;
-      left: var(--fan-x);
-      top: var(--fan-y);
-      z-index: var(--fan-order);
-    }
-    .hand > li:has([data-in-flight]) {
-      z-index: 100;
-    }
-    .hand > li:has(button:hover),
-    .hand > li:focus-within {
-      z-index: 101;
-    }
-    .hand > li > .card {
-      transition: transform 240ms ease;
-      will-change: transform;
-      position: relative;
-      touch-action: none;
-      user-select: none;
-      cursor: grab;
-      transform: rotate(var(--card-angle, 0deg));
-    }
-    .hand-help {
-      font-size: 0.875rem;
-      color: var(--color-muted, #506050);
-      line-height: 1.5;
-    }
-    .hand[data-dragging] > li > .card {
-      transform: rotate(var(--card-angle, 0deg));
-      cursor: grabbing;
-    }
-    .hand > li > .card[data-drag-source] {
-      opacity: 0.35;
-    }
-    .card[data-drop-side]::after {
-      content: "";
-      position: absolute;
-      width: 3px;
-      top: -0.25rem;
-      bottom: -0.25rem;
-      z-index: 101;
-      background: var(--color-primary, #386541);
-      border-radius: 2px;
-    }
-    .card[data-drop-side="before"]::after {
-      left: -0.45rem;
-    }
-    .card[data-drop-side="after"]::after {
-      right: -0.45rem;
-    }
-    .drag-preview,
-    .card-flight[data-flight-ghost] {
-      position: fixed;
-      left: 0;
-      top: 0;
-      z-index: 100;
-      pointer-events: none;
-      margin: 0;
-      box-shadow: 0 0.5rem 1.5rem #0004;
-      will-change: transform;
-      cursor: grabbing;
-    }
-    .card-flight {
-      z-index: 100;
-      pointer-events: none;
-    }
-    .card-shell {
-      padding: 0;
-      border: 0;
-      background: transparent;
-      box-shadow: none;
-      perspective: 600px;
-    }
-    .flight-flipper {
-      display: block;
-      position: relative;
-      width: 100%;
-      height: 100%;
-      transform-style: preserve-3d;
-      transform: rotateY(0deg);
-      will-change: transform;
-    }
-    .flight-front,
-    .flight-back {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      backface-visibility: hidden;
-    }
-    .drag-preview .flight-front {
-      box-shadow: 0 0.5rem 1.5rem #0004;
-    }
-    .flight-back {
-      display: grid;
-      place-items: center;
-      transform: rotateY(180deg);
-    }
-    .flight-flipper[data-flip-axis="X"] > .flight-back {
-      transform: rotateX(180deg);
-    }
-    .hand > li > .card:hover,
-    .hand > li > .card:focus-visible {
-      transform: translateY(calc(-1 * var(--hover-lift, 0.25rem))) rotate(var(--card-angle, 0deg));
-    }
-    .hand[data-dragging] > li > .card:hover,
-    .hand[data-dragging] > li > .card:focus-visible {
-      transform: rotate(var(--card-angle, 0deg));
-    }
-    .hand > li > .card[data-in-flight] {
-      transform: rotate(var(--card-angle, 0deg));
-      transition: none;
-    }
-    .layout-switch {
-      display: inline-flex;
-      position: relative;
-      gap: 0.125rem;
-      padding: 0.125rem;
-      border: 1px solid var(--color-border, #d0d8d0);
-      border-radius: 0.625rem;
-    }
-    .layout-switch::before {
-      content: "";
-      position: absolute;
-      inset-block: 0.125rem;
-      left: 0.125rem;
-      width: 2.5rem;
-      border-radius: 0.5rem;
-      background: var(--color-hover, #e9efe7);
-      pointer-events: none;
-      transform: translateX(0);
-      transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
-    }
-    .layout-switch:has(button:nth-child(2)[aria-pressed="true"])::before {
-      transform: translateX(calc(100% + 0.125rem));
-    }
-    .flip-switch {
-      display: inline-grid;
-      grid-template-columns: repeat(2, 2.5rem);
-    }
-    .flip-switch::before {
-      bottom: auto;
-      height: 2.5rem;
-    }
-    .flip-switch:has(button:nth-child(3)[aria-pressed="true"])::before {
-      transform: translateY(calc(100% + 0.125rem));
-    }
-    .flip-switch:has(button:nth-child(4)[aria-pressed="true"])::before {
-      transform: translate(calc(100% + 0.125rem), calc(100% + 0.125rem));
-    }
-    .layout-switch button {
-      display: grid;
-      place-items: center;
-      position: relative;
-      width: 2.5rem;
-      min-height: 2.5rem;
-      padding: 0.375rem;
-      border: 0;
-      background: transparent;
-      color: var(--color-muted, #506050);
-    }
-    .layout-switch button[aria-pressed="true"] {
-      color: var(--color-text, #202820);
-    }
-    .layout-switch svg {
-      width: 1.5rem;
-      height: 1.5rem;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2;
-    }
-    .layout-tooltip {
-      position: absolute;
-      top: calc(100% + 0.5rem);
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 200;
-      padding: 0.375rem 0.625rem;
-      border-radius: 0.375rem;
-      color: var(--color-background, #fff);
-      background: var(--color-text, #202820);
-      font-size: 0.75rem;
-      white-space: nowrap;
-      visibility: hidden;
-      pointer-events: none;
-    }
-    .layout-switch button:hover .layout-tooltip,
-    .layout-switch button:focus-visible .layout-tooltip {
-      visibility: visible;
-    }
-    .empty-hand {
-      padding-block: 1rem;
-    }
-    .status {
-      min-height: 1.5em;
-      font-size: 0.875rem;
-    }
-    details {
-      border-top: 1px solid var(--color-border, #d0d8d0);
-      padding-top: 0.875rem;
-      font-size: 0.875rem;
-      line-height: 1.6;
-    }
-    details p {
-      max-width: 70ch;
-    }
-    summary {
-      width: fit-content;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .layout-switch::before,
-      .hand > li > .card {
-        transition: none;
-      }
-    }
-  `;
+  static styles = cardTableStyles;
 }
 
 if (!customElements.get("card-game")) customElements.define("card-game", CardGame);
