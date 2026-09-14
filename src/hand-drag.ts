@@ -1,3 +1,5 @@
+import { DragMotion } from "./drag-motion.js";
+
 const DRAG_DISTANCE = 6;
 
 type Drag = {
@@ -8,6 +10,11 @@ type Drag = {
   startY: number;
   offsetX: number;
   offsetY: number;
+  targetX: number;
+  targetY: number;
+  motion: DragMotion;
+  frame?: number;
+  lastFrame?: number;
   preview?: HTMLElement;
   marker?: HTMLElement;
   destination?: number;
@@ -35,6 +42,9 @@ export class HandDrag {
       startY: event.clientY,
       offsetX: event.clientX - rect.left,
       offsetY: event.clientY - rect.top,
+      targetX: rect.left,
+      targetY: rect.top,
+      motion: new DragMotion(rect.left, rect.top),
     };
     source.setPointerCapture(event.pointerId);
     window.addEventListener("blur", this.cancel);
@@ -54,15 +64,33 @@ export class HandDrag {
       preview.setAttribute("aria-hidden", "true");
       preview.inert = true;
       preview.tabIndex = -1;
+      preview.style.transformOrigin = `${drag.offsetX}px ${drag.offsetY}px`;
       drag.source.getRootNode().appendChild(preview);
       drag.preview = preview;
       drag.source.setAttribute("data-drag-source", "");
       drag.hand.setAttribute("data-dragging", "");
     }
     event.preventDefault();
-    drag.preview.style.left = `${event.clientX - drag.offsetX}px`;
-    drag.preview.style.top = `${event.clientY - drag.offsetY}px`;
+    drag.targetX = event.clientX - drag.offsetX;
+    drag.targetY = event.clientY - drag.offsetY;
+    if (drag.frame === undefined) this.animate(performance.now());
     this.position(event.clientX, event.clientY);
+  };
+
+  private animate = (time: number): void => {
+    const drag = this.drag;
+    if (!drag?.preview) return;
+    const elapsed = drag.lastFrame === undefined ? 0 : (time - drag.lastFrame) / 1000;
+    drag.lastFrame = time;
+    drag.motion.step(
+      drag.targetX,
+      drag.targetY,
+      elapsed,
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    );
+    const { x, y, angle } = drag.motion;
+    drag.preview.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${angle}deg)`;
+    drag.frame = requestAnimationFrame(this.animate);
   };
 
   private position(x: number, y: number): void {
@@ -125,6 +153,7 @@ export class HandDrag {
     const drag = this.drag;
     if (!drag) return;
     this.drag = undefined;
+    if (drag.frame !== undefined) cancelAnimationFrame(drag.frame);
     drag.preview?.remove();
     drag.marker?.removeAttribute("data-drop-side");
     drag.source.removeAttribute("data-drag-source");

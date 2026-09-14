@@ -111,6 +111,66 @@ test("keyboard reordering preserves focus and Enter still plays", async ({ page 
   await expect(cards(page)).toHaveCount(4);
 });
 
+test("drag preview leans in both directions and settles while the pointer is held still", async ({
+  page,
+}) => {
+  await draw(page);
+  const original = await order(page);
+  const source = cards(page).nth(2);
+  await beginDrag(page, source);
+  const rect = await box(source);
+  const x = rect.x + rect.width / 2 + 10;
+  const y = rect.y + rect.height / 2;
+  const angle = () =>
+    page.locator(".drag-preview").evaluate((node) => {
+      const matrix = new DOMMatrix(getComputedStyle(node).transform);
+      return (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
+    });
+  for (let step = 1; step <= 16; step++) {
+    await page.mouse.move(x + step * 5, y);
+    await page.waitForTimeout(16);
+  }
+  expect(await angle()).toBeGreaterThan(3);
+  for (let step = 1; step <= 24; step++) {
+    await page.mouse.move(x + 80 - step * 5, y);
+    await page.waitForTimeout(16);
+  }
+  expect(await angle()).toBeLessThan(-3);
+  await expect.poll(async () => Math.abs(await angle())).toBeLessThan(0.2);
+  expect(await order(page)).toEqual(original);
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(page.locator(".drag-preview")).toHaveCount(0);
+});
+
+test("reduced motion keeps the preview upright and attached to the pointer", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await draw(page);
+  const source = cards(page).first();
+  await beginDrag(page, source);
+  const rect = await box(cards(page).last());
+  const x = rect.x + rect.width / 2;
+  const y = rect.y + rect.height / 2;
+  await page.mouse.move(x, y, { steps: 8 });
+  await expect
+    .poll(() =>
+      page.locator(".drag-preview").evaluate((node) => {
+        const matrix = new DOMMatrix(getComputedStyle(node).transform);
+        return matrix.b;
+      }),
+    )
+    .toBe(0);
+  await expect
+    .poll(async () => {
+      const preview = await box(page.locator(".drag-preview"));
+      return Math.abs(preview.x + preview.width / 2 - x);
+    })
+    .toBeLessThan(1);
+  await page.mouse.up();
+  await expect(cards(page)).toHaveCount(5);
+  await expect(page.locator(".drag-preview")).toHaveCount(0);
+});
+
 test("real touch input reorders across wrapped rows and tapping still plays", async ({
   browser,
 }) => {

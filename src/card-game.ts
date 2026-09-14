@@ -492,11 +492,13 @@ export class CardGame extends LitElement {
     }
     .drag-preview {
       position: fixed;
+      left: 0;
+      top: 0;
       z-index: 100;
       pointer-events: none;
       margin: 0;
       box-shadow: 0 0.5rem 1.5rem #0004;
-      transform: rotate(4deg);
+      will-change: transform;
       cursor: grabbing;
     }
     .hand .card:hover,
