@@ -729,10 +729,26 @@ export class CardGame extends LitElement {
     }
     .layout-switch {
       display: inline-flex;
+      position: relative;
       gap: 0.125rem;
       padding: 0.125rem;
       border: 1px solid var(--color-border, #d0d8d0);
       border-radius: 0.625rem;
+    }
+    .layout-switch::before {
+      content: "";
+      position: absolute;
+      inset-block: 0.125rem;
+      left: 0.125rem;
+      width: 2.5rem;
+      border-radius: 0.5rem;
+      background: var(--color-hover, #e9efe7);
+      pointer-events: none;
+      transform: translateX(0);
+      transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .layout-switch:has(button:nth-child(2)[aria-pressed="true"])::before {
+      transform: translateX(calc(100% + 0.125rem));
     }
     .layout-switch button {
       display: grid;
@@ -746,7 +762,6 @@ export class CardGame extends LitElement {
       color: var(--color-muted, #506050);
     }
     .layout-switch button[aria-pressed="true"] {
-      background: var(--color-hover, #e9efe7);
       color: var(--color-text, #202820);
     }
     .layout-switch svg {
@@ -795,6 +810,7 @@ export class CardGame extends LitElement {
       width: fit-content;
     }
     @media (prefers-reduced-motion: reduce) {
+      .layout-switch::before,
       .hand > li > .card {
         transition: none;
       }
