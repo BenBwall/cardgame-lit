@@ -19,9 +19,10 @@
     "build": "tsc && bun scripts/build-package.ts && bun scripts/build-demo.ts",
     "check": "tsc --noEmit && tsc --project server/tsconfig.json && tsc --project tests/tsconfig.json",
     "server": "bun server/main.ts",
-    "server:dev": "bun --env-file=server/development.env server/main.ts",
+    "server:dev": "bun server/main.ts --dev",
     "test": "bun test tests",
-    "test:browser": "bun run build && playwright test"
+    "test:browser": "bun run build && bun --bun playwright test",
+    "dev": "bun scripts/preview.ts --dev"
   },
   "dependencies": {
     "@lucide/icons": "^1.46.0"

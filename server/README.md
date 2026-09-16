@@ -8,22 +8,35 @@ From the cardgame checkout, with Bun 1.4.2 or newer:
 
 ```powershell
 bun install --frozen-lockfile
-bun run server:dev
-# In another terminal:
-$env:MULTIPLAYER_URL = 'http://127.0.0.1:8787'
-bun run build
-bun scripts/preview.ts
+bun run dev
 ```
 
-Open `http://127.0.0.1:4175` in two separate browser contexts. Select Shithead, then the Multiplayer subtab. Both users may use the same display name. The creator chooses the rules, shares the six-character code, and starts once both players connect. Each player may swap their own setup cards, then both mark themselves ready.
+This builds and serves the demo at `http://127.0.0.1:4175` and starts the game server at `http://127.0.0.1:8787`. Source saves rebuild the demo; refresh the browser to load them. The Arcada homepage's `bun run dev` also starts the backend automatically and connects its preview to it. A compatible server already running at the configured URL is reused. Stopping a preview stops only the backend it started. Restart development after changing environment variables or server code.
 
-For the Arcada homepage, set `MULTIPLAYER_URL` when building or starting its preview. Production should use e.g. `https://cards.example.org:8443`, replaced with your actual server origin. It is emitted into the static mount element. Without configuration the lobby explains that online play is unavailable; local modes continue working. Embedders can set `<card-game multiplayer-url="https://cards.example.org">` or its `multiplayerUrl` property. Only HTTPS is accepted, except HTTP on loopback for development. Do not put credentials or paths in this URL.
+Open the preview in two separate browser contexts. Select Shithead, then the Multiplayer subtab. Both users may use the same display name. The creator chooses the rules, shares the six-character code, and starts once both players connect. Each player may swap their own setup cards, then both mark themselves ready. To run only the backend, use `bun run server:dev`.
+
+### Environment variables
+
+Bun reads `.env` in the checkout where you run the command. Copy `.env.example` to `.env` and uncomment the settings you need, or set them in your shell.
+
+| Variable               | Purpose and default                                                                                                                                                                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MULTIPLAYER_DEV_URL`  | Browser server origin in development; defaults to `http://127.0.0.1:8787`. A loopback HTTP URL starts a local backend; an HTTPS URL uses an externally managed backend.                                                                         |
+| `MULTIPLAYER_PROD_URL` | Browser server origin for production builds; unset by default. Use your public HTTPS origin.                                                                                                                                                    |
+| `MULTIPLAYER_URL`      | Overrides either mode-specific URL. An explicitly empty value disables online play and automatic backend startup.                                                                                                                               |
+| `MULTIPLAYER_PORT`     | Local game server port and the port in the default development URL; 8787 in development, 8443 in production. An explicit development URL determines the auto-started server's port.                                                             |
+| `MULTIPLAYER_HOST`     | Bind address for a manually started server; `127.0.0.1` in development, `0.0.0.0` in production. Development is restricted to loopback. Automatic startup uses the configured URL's host.                                                       |
+| `MULTIPLAYER_ORIGINS`  | Comma-separated exact browser origins, without paths, trailing slashes or wildcards. Defaults to localhost/127.0.0.1 on ports 4173–4175 in development, plus the launching preview's origin; production defaults to `https://people.arcada.fi`. |
+| `TLS_CERT`, `TLS_KEY`  | Certificate and key paths, both required for production server startup. Automatic HTTP development ignores these.                                                                                                                               |
+| `PORT`                 | Frontend preview port (4175 standalone, 4173 homepage). A manually started backend also accepts this as a fallback when `MULTIPLAYER_PORT` is absent.                                                                                           |
+
+`bun run dev` selects development automatically; standalone builds also recognize `NODE_ENV=development` or `MULTIPLAYER_DEV=1`. Production builds have no localhost fallback. The resolved URL is emitted into static HTML, so rebuild to change it. Without a URL, the online lobby explains that online play is unavailable; local modes continue working. Embedders can set `<card-game multiplayer-url="https://cards.example.org">` or its `multiplayerUrl` property. Only HTTPS is accepted, except HTTP on loopback for development. Do not put credentials or paths in this URL. When reusing a manually started server, ensure its allowed origins include your preview's origin.
 
 ## Production
 
-Copy this checkout to a host that supports Bun and persistent WebSocket connections. Set `TLS_CERT` and `TLS_KEY` to readable certificate and private-key paths, and `PORT` if needed (default 8443). Run `bun run server`. Production refuses to start without TLS and binds to `0.0.0.0`; development HTTP binds only to `127.0.0.1`. Use a valid certificate for your public server hostname, arrange certificate renewal and process restarts with your hosting provider, and expose HTTPS/WSS through its firewall. Keep private keys outside the checkout. The supplied `Dockerfile` also runs the service with the same environment variables and mounted certificates.
+Copy this checkout to a host that supports Bun and persistent WebSocket connections. Set `TLS_CERT` and `TLS_KEY` to readable certificate and private-key paths, and `MULTIPLAYER_PORT` if needed (default 8443). Run `bun run server`. Production refuses to start without TLS and binds to `0.0.0.0`; development HTTP binds only to loopback. Use a valid certificate for your public server hostname, arrange certificate renewal and process restarts with your hosting provider, and expose HTTPS/WSS through its firewall. Keep private keys outside the checkout. The supplied `Dockerfile` also runs the service with the same environment variables and mounted certificates.
 
-The exact production browser origin is `https://people.arcada.fi`. Preflights allow POST with Content-Type and Authorization. There are no cookies, credentialed CORS, wildcard origins, or redirects. WebSocket upgrade origins must match too. Additional production origins require an explicit deployment configuration/code change. All `people.arcada.fi/~user/` pages share this origin: **CORS is not authentication**. A permitted origin still needs a valid room-scoped credential. A room code is an invitation to take an available seat, not authority to control an existing seat. There is no private-room password or room directory.
+The default production browser origin is `https://people.arcada.fi`; override it with `MULTIPLAYER_ORIGINS`. Preflights allow POST with Content-Type and Authorization. There are no cookies, credentialed CORS, wildcard origins, or redirects. WebSocket upgrade origins must match too. All `people.arcada.fi/~user/` pages share this origin: **CORS is not authentication**. A permitted origin still needs a valid room-scoped credential. A room code is an invitation to take an available seat, not authority to control an existing seat. There is no private-room password or room directory.
 
 `GET /health` returns `{ "status": "ok", "protocol": 1 }` without room/player data. Termination signals close sessions gracefully. All rooms are in memory and disappear on restart. Run one process/replica; sticky routing alone does not make this store distributed. For multiple replicas, implement atomic room transactions and cross-process socket delivery before scaling.
 

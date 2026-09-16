@@ -8,3 +8,5 @@ playwright-report/
 Thumbs.db
 *.log
 .env*
+
+!.env.example

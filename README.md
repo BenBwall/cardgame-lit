@@ -34,13 +34,17 @@ SolidStart, Solid stores, SSR entry points, routing, Tailwind, global theme scri
 
 ```sh
 bun install --frozen-lockfile
+bun run dev
+# In another terminal, run the checks and production build:
 bun run check
 bun test
 bun run build
 bun run test:browser
 ```
 
-The build emits reusable ES modules and declarations in `dist/`, and a self-contained static demo in `demo/`. The original PNGs are served locally from `assets/cards/` using `<img>` elements. Serve the entire `demo/` directory with any static file host. No runtime server is required.
+`bun run dev` starts the demo at `http://127.0.0.1:4175` and its local multiplayer backend at `http://127.0.0.1:8787`. Configure development and production server URLs with `MULTIPLAYER_DEV_URL` and `MULTIPLAYER_PROD_URL`; `MULTIPLAYER_URL` overrides both. See [.env.example](.env.example) and the [environment variable guide](server/README.md#environment-variables).
+
+The build emits reusable ES modules and declarations in `dist/`, and a self-contained static demo in `demo/`. The original PNGs are served locally from `assets/cards/` using `<img>` elements. Serve the entire `demo/` directory with any static file host. Local play needs no runtime server; online play uses the separate game server.
 
 Browser tests use installed Google Chrome and Playwright Firefox (`bun --bun playwright install firefox`) with a local test server. They cover card identity and landing pixels at 100%, 150%, and 200% display scaling, mouse drags, directional tilt and settling, reduced motion, wrapped rows, keyboard reordering, undo, cancellation, and click-to-play. Native touch injection runs in Chrome only because it uses CDP.
 
