@@ -74,7 +74,9 @@ bun run railway:apply
 railway domain --service cardgame-backend --port 8787
 ```
 
-The scripts use `railway config plan --file railway-backend.ts` and `railway config apply --file railway-backend.ts`. Planning reads the linked environment; applying changes it after showing the plan. This file describes the whole target environment, so omitted services or variables can be removed. Use a dedicated environment and check the plan before applying to existing resources. Do not run it directly with `bun railway-backend.ts`; it exports configuration for the Railway CLI.
+The scripts run `railway config plan --file railway-backend.ts` and `railway config apply --file railway-backend.ts` through a launcher that passes the resolved Railway executable to the SDK's version check. This avoids a misleading "requires Railway CLI 5.42.1 or newer" error in Git Bash on Windows, even when the CLI is already current. Use the package scripts for both commands; extra flags are forwarded, for example `bun run railway:plan --json`.
+
+Planning reads the linked environment; applying changes it after showing the plan. This file describes the whole target environment, so omitted services or variables can be removed. Use a dedicated environment and check the plan before applying to existing resources. Do not run it directly with `bun railway-backend.ts`; it exports configuration for the Railway CLI.
 
 Generated Railway domains are managed separately from the IaC file. After creating the domain, check `https://<generated-domain>/health` and set `MULTIPLAYER_PROD_URL=https://<generated-domain>` in the homepage's build environment, then rebuild and publish the homepage. Set additional allowed browser origins by editing `MULTIPLAYER_ORIGINS` in the IaC file and applying again. Source pushes to `main` deploy application changes; changes to the IaC file itself need another plan/apply.
 

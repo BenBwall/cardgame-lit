@@ -23,8 +23,8 @@
     "test": "bun test tests",
     "test:browser": "bun run build && bun --bun playwright test",
     "dev": "bun scripts/preview.ts --dev",
-    "railway:plan": "railway config plan --file railway-backend.ts",
-    "railway:apply": "railway config apply --file railway-backend.ts"
+    "railway:plan": "bun scripts/railway.ts config plan --file railway-backend.ts",
+    "railway:apply": "bun scripts/railway.ts config apply --file railway-backend.ts"
   },
   "dependencies": {
     "@lucide/icons": "^1.46.0"
