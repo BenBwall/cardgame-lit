@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { OnlineClient } from "../src/multiplayer/client.js";
-import type { OnlineLobby, LobbyGame } from "../src/multiplayer/online-lobby.js";
-import type { RoomView } from "../src/multiplayer/protocol.js";
-import type { OnlineShitheadView } from "../src/multiplayer/shithead-view.js";
-import { canPlayShithead, shitheadRank } from "../src/shithead-state.js";
-import { cardName, type Card } from "../src/cards.js";
+import type { OnlineClient } from "@cardgame/multiplayer/client.js";
+import type { OnlineLobby, LobbyGame } from "@cardgame/multiplayer/online-lobby.js";
+import type { RoomView } from "@cardgame/multiplayer/protocol.js";
+import type { OnlineShitheadView } from "@cardgame/multiplayer/shithead-view.js";
+import { canPlayShithead, shitheadRank } from "@cardgame/shithead-state.js";
+import { cardName, type Card } from "@cardgame/cards.js";
 
 const strength = (card: Card) =>
   card.rank === "10" ? 16 : card.rank === "2" ? 15 : shitheadRank(card);

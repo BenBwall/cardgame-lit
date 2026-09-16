@@ -1,5 +1,5 @@
-import type { GameAdapter } from "../../server/core/adapter.js";
-import { isRecord } from "../../src/multiplayer/protocol.js";
+import type { GameAdapter } from "@server/core/adapter.js";
+import { isRecord } from "@cardgame/multiplayer/protocol.js";
 
 /** Test-only game: three-player support and entirely different options/actions/state. */
 export const counterAdapter: GameAdapter<

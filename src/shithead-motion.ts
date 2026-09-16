@@ -1,6 +1,8 @@
-import { cardId, type Card } from "./cards.js";
-import { cardGeometry } from "./card-geometry.js";
-import type { ShitheadState } from "./shithead-state.js";
+import { cardId, type Card } from "@cardgame/cards.js";
+import { cardGeometry } from "@cardgame/card-geometry.js";
+import type { ShitheadState } from "@cardgame/shithead-state.js";
+
+import type { DrawFlip } from "@cardgame/card-options.js";
 
 type Pose = {
   x: number;
@@ -46,11 +48,11 @@ export class ShitheadMotion {
   constructor(
     private readonly root: () => ShadowRoot,
     private readonly face: (card: Card) => HTMLElement,
-    private readonly drawFlip = (): { axis: "X" | "Y"; startAngle: number } => ({
+    private readonly drawFlip = (): DrawFlip => ({
       axis: "X",
       startAngle: 180,
     }),
-    private readonly backStyle: (card: Card) => string = () => "",
+    private readonly back: (card: Card) => HTMLElement,
   ) {}
   key(card: Card): string {
     const id = cardId(card);
@@ -71,7 +73,7 @@ export class ShitheadMotion {
   }
   finish = (): void => {
     this.generation++;
-    for (const cleanup of [...this.cleanups]) cleanup();
+    for (const cleanup of this.cleanups) cleanup();
     this.flights.clear();
   };
   capture(preview?: HTMLElement): Snapshot {
@@ -134,9 +136,7 @@ export class ShitheadMotion {
         toZone === "0-hand" ||
         toZone === "burned";
       // Only public faces enter a flight. Hidden-to-hidden moves keep a plain back.
-      const node =
-        faceWasKnown || faceIsKnown ? this.face(card) : (from.node.cloneNode(true) as HTMLElement);
-      if (!faceWasKnown && !faceIsKnown) node.style.cssText += this.backStyle(card);
+      const node = faceWasKnown || faceIsKnown ? this.face(card) : this.back(card);
       const delay = fromZone === "stock" ? 360 + drawIndex++ * 95 : 0;
       if (burns && toZone === "burned") {
         const middle = after.zones.get("pile")!;

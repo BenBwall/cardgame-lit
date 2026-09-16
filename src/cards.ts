@@ -1,11 +1,14 @@
 export const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"] as const;
 export const SUITS = ["Clubs", "Diamonds", "Hearts", "Spades"] as const;
-export type Card = Readonly<{ rank: (typeof RANKS)[number]; suit: (typeof SUITS)[number] }>;
+export type Rank = (typeof RANKS)[number];
+export type Suit = (typeof SUITS)[number];
+export type CardId = `${Rank}-${Suit}`;
+export type Card = Readonly<{ rank: Rank; suit: Suit }>;
 export type SortOrder = "draw-order" | "rank-then-suit" | "suit-then-rank" | "manual";
 export const SUIT_SYMBOLS = { Clubs: "♣", Diamonds: "♦", Hearts: "♥", Spades: "♠" } as const;
-const suitOrder: Card["suit"][] = ["Hearts", "Diamonds", "Spades", "Clubs"];
+const suitOrder: readonly Suit[] = ["Hearts", "Diamonds", "Spades", "Clubs"] as const;
 
-export const cardId = (card: Card): string => `${card.rank}-${card.suit}`;
+export const cardId = (card: Card): CardId => `${card.rank}-${card.suit}`;
 export const cardName = (card: Card): string => `${card.rank} of ${card.suit}`;
 export const createDeck = (): Card[] =>
   SUITS.flatMap((suit) => RANKS.map((rank) => ({ rank, suit })));

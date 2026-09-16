@@ -1,23 +1,27 @@
 import { LitElement, css, html, nothing, render } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { Grid3x3, PlayingCards, ArrowDown, ArrowUp, ArrowRight, ArrowLeft } from "@lucide/icons";
+import { Grid3x3, PlayingCards } from "@lucide/icons";
+import { flipOptions, type HandLayout } from "@cardgame/card-options.js";
 import { buildLucideSvg } from "@lucide/icons/build";
-import { type Card, type SortOrder, SUIT_SYMBOLS, cardId, cardName } from "./cards.js";
-import { handCards, reorderHand, type GameState } from "./game-state.js";
-import { HandDrag } from "./hand-drag.js";
-import { HandSizeMotion } from "./hand-size-motion.js";
-import { fanLayout } from "./hand-layout.js";
-import { cardTableStyles } from "./card-table-styles.js";
+import { type Card, type SortOrder, SUIT_SYMBOLS, cardId, cardName } from "@cardgame/cards.js";
+import { handCards, reorderHand, type GameState } from "@cardgame/game-state.js";
+import { HandDrag } from "@cardgame/hand-drag.js";
+import { HandSizeMotion } from "@cardgame/hand-size-motion.js";
+import { fanLayout } from "@cardgame/hand-layout.js";
+import { cardTableStyles } from "@cardgame/card-table-styles.js";
 import {
   faceContents,
   artLayer,
   type BackAssignments,
   newBackAssignments,
   isBackAssignments,
-  cardBackStyle,
-} from "./card-art.js";
-import { ShitheadMotion } from "./shithead-motion.js";
+  backContents,
+  faceImage,
+  type CardArtwork,
+  defaultArtwork,
+} from "@cardgame/card-art.js";
+import { ShitheadMotion } from "@cardgame/shithead-motion.js";
 import {
   gameStorageKey,
   readSavedGame,
@@ -25,7 +29,7 @@ import {
   isShitheadGame,
   isSortOrder,
   isRules,
-} from "./saved-game.js";
+} from "@cardgame/saved-game.js";
 import {
   type ShitheadState,
   type ShitheadRules,
@@ -40,19 +44,15 @@ import {
   shitheadSource,
   startShithead,
   swapShithead,
-} from "./shithead-state.js";
+} from "@cardgame/shithead-state.js";
 
-const flipOptions = [
-  { label: "Top to bottom", icon: ArrowDown, axis: "X", startAngle: 180 },
-  { label: "Bottom to top", icon: ArrowUp, axis: "X", startAngle: -180 },
-  { label: "Left to right", icon: ArrowRight, axis: "Y", startAngle: -180 },
-  { label: "Right to left", icon: ArrowLeft, axis: "Y", startAngle: 180 },
-] as const;
+type BoardCard = { kind: "hand" | "faceUp" | "faceDown"; index: number; card: Card };
+type TableTab = "table" | "options";
 
 export class ShitheadGame extends LitElement {
   static properties = {
     storageKey: { attribute: "storage-key" },
-    randomBacks: { type: Boolean, reflect: true, attribute: "random-backs" },
+    artwork: { attribute: false },
     saveFailed: { state: true },
     previewPile: { state: true },
     game: { state: true },
@@ -68,11 +68,11 @@ export class ShitheadGame extends LitElement {
     handWidth: { state: true },
     selecting: { state: true },
     flipDirection: { state: true },
-  };
+  } as const;
   private game?: ShitheadState;
   storageKey = "";
-  randomBacks = false;
-  private backAssignments: BackAssignments = {};
+  artwork: CardArtwork = defaultArtwork();
+  private backAssignments!: BackAssignments;
   private restored = false;
   private saveFailed = false;
   private previewPile: "pile" | "burned" | null = null;
@@ -82,10 +82,10 @@ export class ShitheadGame extends LitElement {
   private swapHand = "";
   private selecting = false;
   private confirming = false;
-  private tab: "table" | "options" = "table";
+  private tab: TableTab = "table";
   private rules: ShitheadRules = { ...DEFAULT_SHITHEAD_RULES };
   private busy = false;
-  private handLayout: "fan" | "grid" = "fan";
+  private handLayout: HandLayout = "fan";
   private sortOrder: SortOrder = "draw-order";
   private handOrder: string[] = [];
   private handWidth = 600;
@@ -101,7 +101,12 @@ export class ShitheadGame extends LitElement {
       return node;
     },
     () => flipOptions[this.flipDirection],
-    (card) => cardBackStyle(card, this.backAssignments),
+    (card) => {
+      const node = document.createElement("div");
+      node.className = "card back";
+      render(backContents(this.artwork, card, this.backAssignments), node);
+      return node;
+    },
   );
   private handSizeMotion = new HandSizeMotion(() => this.renderRoot);
   private handDrag = new HandDrag(
@@ -140,14 +145,15 @@ export class ShitheadGame extends LitElement {
             this.handOrder = [
               ...new Set(
                 saved.handOrder.filter(
-                  (id): id is string => typeof id === "string" && handIds.includes(id),
+                  (id): id is string =>
+                    typeof id === "string" && handIds.some((card) => card === id),
                 ),
               ),
             ];
           if (
             typeof saved.swapHand === "string" &&
             this.game.phase === "setup" &&
-            handIds.includes(saved.swapHand)
+            handIds.some((card) => card === saved.swapHand)
           )
             this.swapHand = saved.swapHand;
           const available = this.game.players[0][shitheadSource(this.game.players[0])];
@@ -224,7 +230,7 @@ export class ShitheadGame extends LitElement {
       played: game.pile,
       hand: game.players[0].hand,
       handOrder: [
-        ...this.handOrder.filter((id) => ids.includes(id)),
+        ...this.handOrder.filter((id) => ids.some((card) => card === id)),
         ...ids.filter((id) => !this.handOrder.includes(id)),
       ],
     };
@@ -275,7 +281,7 @@ export class ShitheadGame extends LitElement {
     // New deals reset the board together; normal moves animate between real positions.
     void this.commit(newShithead(Math.random, this.rules));
   }
-  private changeTab(tab: "table" | "options"): void {
+  private changeTab(tab: TableTab): void {
     clearTimeout(this.computerTimer);
     this.computerTimer = undefined;
     this.handDrag.dispose();
@@ -361,9 +367,7 @@ export class ShitheadGame extends LitElement {
       .querySelector<HTMLButtonElement>(`[data-card-id="${id}"]`)
       ?.focus({ preventScroll: true });
   }
-  private dragSource(
-    id: string,
-  ): { kind: "hand" | "faceUp" | "faceDown"; index: number; card: Card } | undefined {
+  private dragSource(id: string): BoardCard | undefined {
     if (!this.game) return undefined;
     const player = this.game.players[0];
     if (id.startsWith("faceDown:")) {
@@ -514,11 +518,9 @@ export class ShitheadGame extends LitElement {
                       data-suit=${card.suit}
                       aria-label=${cardName(card)}
                     >
-                      <span
-                        aria-hidden="true"
-                        style=${`visibility:var(--card-label-${cardId(card)},visible)`}
+                      <span aria-hidden="true" ?hidden=${!!faceImage(this.artwork, card)}
                         >${card.rank}<span>${SUIT_SYMBOLS[card.suit]}</span></span
-                      >${artLayer(card)}
+                      >${artLayer(card, this.artwork)}
                     </li>`,
                 )}
               </ol>`
@@ -554,9 +556,10 @@ export class ShitheadGame extends LitElement {
   }
   private face(card: Card) {
     return html`<span class="flight-flipper" aria-hidden="true"
-      ><span class="card face flight-front" data-suit=${card.suit}>${faceContents(card)}</span
-      ><span class="card back flight-back" style=${cardBackStyle(card, this.backAssignments)}
-        ><span class="back-mark">✦</span></span
+      ><span class="card face flight-front" data-suit=${card.suit}
+        >${faceContents(card, this.artwork)}</span
+      ><span class="card back flight-back"
+        >${backContents(this.artwork, card, this.backAssignments)}</span
       ></span
     >`;
   }
@@ -606,7 +609,6 @@ export class ShitheadGame extends LitElement {
               ? index === 0
                 ? html`<button
                     class="card back lower-card"
-                    style=${cardBackStyle(down, this.backAssignments)}
                     type="button"
                     data-concealed="true"
                     data-board-key=${this.motion.key(down)}
@@ -618,17 +620,16 @@ export class ShitheadGame extends LitElement {
                       void this.commit(playShithead(game, 0, [player.faceDown.indexOf(down)]));
                     }}
                   >
-                    <span class="back-mark" aria-hidden="true">✦</span>
+                    ${backContents(this.artwork, down, this.backAssignments)}
                   </button>`
                 : html`<div
                     class="card back lower-card"
-                    style=${cardBackStyle(down, this.backAssignments)}
                     data-concealed="true"
                     data-board-key=${this.motion.key(down)}
                     aria-label="Computer face-down card"
                     role="img"
                   >
-                    <span class="back-mark" aria-hidden="true">✦</span>
+                    ${backContents(this.artwork, down, this.backAssignments)}
                   </div>`
               : nothing
           }
@@ -809,21 +810,20 @@ export class ShitheadGame extends LitElement {
             aria-label=${`Computer hand: ${opponent.hand.length} hidden cards`}
             style=${`--opponent-spread:${Math.min(180, Math.max(0, opponent.hand.length - 1) * 22)}px`}
           >
-            ${opponent.hand.map((card, index) => html`<div class="card back" aria-hidden="true" data-concealed="true" data-board-key=${this.motion.key(card)} style=${`${cardBackStyle(card, this.backAssignments)}--opponent-x:${opponent.hand.length > 1 ? index / (opponent.hand.length - 1) : 0.5};--opponent-angle:${opponent.hand.length > 1 ? ((index / (opponent.hand.length - 1)) * 2 - 1) * 12 : 0}deg`}><span class="back-mark">✦</span></div>`)}
+            ${opponent.hand.map((card, index) => html`<div class="card back" aria-hidden="true" data-concealed="true" data-board-key=${this.motion.key(card)} style=${`--opponent-x:${opponent.hand.length > 1 ? index / (opponent.hand.length - 1) : 0.5};--opponent-angle:${opponent.hand.length > 1 ? ((index / (opponent.hand.length - 1)) * 2 - 1) * 12 : 0}deg`}>${backContents(this.artwork, card, this.backAssignments)}</div>`)}
           </div>
           <div class="opponent-table">${this.tableCards(1)}</div>
           <div class="center-piles">
             <div class="board-pile">
               <div
                 class="pile-base card back"
-                style=${cardBackStyle(game.stock.at(-1), this.backAssignments)}
                 data-board-zone="stock"
                 data-concealed="true"
                 aria-label=${`Stock: ${game.stock.length} cards`}
                 role="img"
                 data-empty=${!game.stock.length}
               >
-                ${game.stock.length ? html`<span class="back-mark" aria-hidden="true">✦</span>` : nothing}
+                ${game.stock.length ? backContents(this.artwork, game.stock.at(-1), this.backAssignments) : nothing}
               </div>
               <span>Stock <b>${game.stock.length}</b></span>
             </div>
@@ -883,7 +883,7 @@ export class ShitheadGame extends LitElement {
                 aria-label=${`Burned: ${game.burned.length} cards`}
               >
                 <span aria-hidden="true"
-                  >${game.burned.length ? html`<span class="card back out-card" style=${cardBackStyle(game.burned.at(-2) ?? game.burned.at(-1), this.backAssignments)}></span><span class="card back out-card" style=${cardBackStyle(game.burned.at(-1), this.backAssignments)}></span>` : html`<span class="pile-outline"></span>`}</span
+                  >${game.burned.length ? html`<span class="card back out-card">${backContents(this.artwork, game.burned.at(-2) ?? game.burned.at(-1), this.backAssignments)}</span><span class="card back out-card">${backContents(this.artwork, game.burned.at(-1), this.backAssignments)}</span>` : html`<span class="pile-outline"></span>`}</span
                 >
               </div>
               <span>Out <b>${game.burned.length}</b></span>
@@ -1021,7 +1021,7 @@ export class ShitheadGame extends LitElement {
       }
       .muted,
       .count {
-        color: var(--color-muted, #506050);
+        color: var(--color-muted, hsl(120 9.091% 34.51%));
       }
       .game-header,
       .tabs,
@@ -1040,12 +1040,12 @@ export class ShitheadGame extends LitElement {
       }
       .tabs {
         margin: 1rem 0;
-        border-bottom: 1px solid var(--color-border, #d0d8d0);
+        border-bottom: 1px solid var(--color-border, hsl(120 9.302% 83.137%));
         padding-bottom: 0.7rem;
       }
       [role="tab"][aria-selected="true"] {
-        background: var(--color-hover, #e9efe7);
-        border-color: var(--color-text, #202820);
+        background: var(--color-hover, hsl(105 20% 92.157%));
+        border-color: var(--color-text, hsl(120 11.111% 14.118%));
       }
       .board {
         position: relative;
@@ -1053,11 +1053,11 @@ export class ShitheadGame extends LitElement {
         justify-items: center;
         gap: 0.7rem;
         padding: 1rem 0.4rem 0.6rem;
-        border: 1px solid var(--color-border, #d0d8d0);
+        border: 1px solid var(--color-border, hsl(120 9.302% 83.137%));
         border-radius: 1.4rem;
         background:
-          radial-gradient(ellipse at center, transparent 30%, #00000006),
-          var(--color-hover, #e9efe7);
+          radial-gradient(ellipse at center, transparent 30%, hsl(0 0% 0% / 0.0235)),
+          var(--color-hover, hsl(105 20% 92.157%));
       }
       .seat {
         font-size: 0.85rem;
@@ -1067,12 +1067,13 @@ export class ShitheadGame extends LitElement {
         width: 0.5rem;
         height: 0.5rem;
         border-radius: 50%;
-        border: 1px solid var(--color-border-strong, #859585);
+        border: 1px solid var(--color-border-strong, hsl(120 7.018% 55.294%));
       }
       .seat[data-active="true"] .turn-dot {
-        background: var(--color-primary, #386541);
-        border-color: var(--color-primary, #386541);
-        box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary, #386541) 15%, transparent);
+        background: var(--color-primary, hsl(132 28.662% 30.784%));
+        border-color: var(--color-primary, hsl(132 28.662% 30.784%));
+        box-shadow: 0 0 0 4px
+          color-mix(in srgb, var(--color-primary, hsl(132 28.662% 30.784%)) 15%, transparent);
       }
       .seat[data-active="true"] strong {
         text-decoration: underline;
@@ -1090,7 +1091,7 @@ export class ShitheadGame extends LitElement {
         left: calc(var(--opponent-x) * var(--opponent-spread));
         top: 2px;
         transform: rotate(var(--opponent-angle));
-        box-shadow: 0 2px 4px #0002;
+        box-shadow: 0 2px 4px hsl(0 0% 0% / 0.1333);
       }
       .table-cards {
         display: flex;
@@ -1104,7 +1105,7 @@ export class ShitheadGame extends LitElement {
         border-radius: 0.5rem;
       }
       .table-slot:empty {
-        outline: 1px dashed var(--color-border, #d0d8d0);
+        outline: 1px dashed var(--color-border, hsl(120 9.302% 83.137%));
         outline-offset: -4px;
       }
       .lower-card {
@@ -1118,7 +1119,7 @@ export class ShitheadGame extends LitElement {
         left: 0;
       }
       .upper-card .card {
-        box-shadow: 0 2px 5px #0002;
+        box-shadow: 0 2px 5px hsl(0 0% 0% / 0.1333);
       }
       .your-table button[data-drag-id] {
         touch-action: none;
@@ -1126,7 +1127,7 @@ export class ShitheadGame extends LitElement {
         cursor: grab;
       }
       [data-drop-zone][data-drop-active] {
-        outline: 3px solid var(--color-primary, #386541);
+        outline: 3px solid var(--color-primary, hsl(132 28.662% 30.784%));
         outline-offset: 5px;
         border-radius: 0.5rem;
       }
@@ -1153,15 +1154,15 @@ export class ShitheadGame extends LitElement {
         justify-items: center;
         gap: 0.6rem;
         font-size: 0.75rem;
-        color: var(--color-muted, #506050);
+        color: var(--color-muted, hsl(120 9.091% 34.51%));
       }
       .board-pile b {
-        color: var(--color-text, #202820);
+        color: var(--color-text, hsl(120 11.111% 14.118%));
         font-variant-numeric: tabular-nums;
         margin-left: 0.2rem;
       }
       .inspectable-pile:focus-visible {
-        outline: 2px solid var(--color-primary, #386541);
+        outline: 2px solid var(--color-primary, hsl(132 28.662% 30.784%));
         outline-offset: 7px;
         border-radius: 0.5rem;
       }
@@ -1177,16 +1178,16 @@ export class ShitheadGame extends LitElement {
         overflow: auto;
         overscroll-behavior: contain;
         padding: 1rem;
-        border: 1px solid var(--color-border-strong, #859585);
+        border: 1px solid var(--color-border-strong, hsl(120 7.018% 55.294%));
         border-radius: 0.75rem;
-        background: var(--color-surface, #f7f9f5);
-        color: var(--color-text, #202820);
-        box-shadow: 0 0.5rem 1.5rem #0003;
+        background: var(--color-surface, hsl(90 25% 96.863%));
+        color: var(--color-text, hsl(120 11.111% 14.118%));
+        box-shadow: 0 0.5rem 1.5rem hsl(0 0% 0% / 0.2);
       }
       .preview-order {
         display: block;
         margin-top: 0.25rem;
-        color: var(--color-muted, #506050);
+        color: var(--color-muted, hsl(120 9.091% 34.51%));
       }
       .preview-cards {
         display: grid;
@@ -1198,11 +1199,13 @@ export class ShitheadGame extends LitElement {
       }
       .preview-card {
         position: relative;
+        aspect-ratio: 2 / 3;
+        box-sizing: border-box;
         padding: 0.4rem 0.25rem;
-        border: 1px solid #b6b9ad;
+        border: 1px solid hsl(75 7.895% 70.196%);
         border-radius: 0.3rem;
-        background: #fffef8;
-        color: #202820;
+        background: hsl(51.429 100% 98.627%);
+        color: hsl(120 11.111% 14.118%);
         text-align: center;
         font-size: 1rem;
         font-weight: 600;
@@ -1213,7 +1216,7 @@ export class ShitheadGame extends LitElement {
       }
       .preview-card[data-suit="Hearts"],
       .preview-card[data-suit="Diamonds"] {
-        color: #b82132;
+        color: hsl(353.245 69.585% 42.549%);
       }
       .pile-base {
         position: relative;
@@ -1222,15 +1225,15 @@ export class ShitheadGame extends LitElement {
       }
       .pile-base.back {
         box-shadow:
-          3px 3px 0 #d8e4d8,
-          4px 4px 0 #778273,
-          6px 6px 0 #d8e4d8,
-          7px 7px 0 #778273;
+          3px 3px 0 hsl(120 18.182% 87.059%),
+          4px 4px 0 hsl(104 6.122% 48.039%),
+          6px 6px 0 hsl(120 18.182% 87.059%),
+          7px 7px 0 hsl(104 6.122% 48.039%);
       }
       .pile-base[data-empty="true"] {
         background: none;
         box-shadow: none;
-        border: 1px dashed var(--color-border-strong, #859585);
+        border: 1px dashed var(--color-border-strong, hsl(120 7.018% 55.294%));
       }
       .pickup {
         cursor: pointer;
@@ -1240,7 +1243,7 @@ export class ShitheadGame extends LitElement {
         cursor: default;
       }
       .pickup:enabled {
-        outline: 2px solid var(--color-primary, #386541);
+        outline: 2px solid var(--color-primary, hsl(132 28.662% 30.784%));
         outline-offset: 5px;
       }
       .pile-card {
@@ -1249,13 +1252,13 @@ export class ShitheadGame extends LitElement {
         top: var(--pile-offset);
         transform: rotate(var(--pile-angle));
         pointer-events: none;
-        box-shadow: 0 2px 5px #0002;
+        box-shadow: 0 2px 5px hsl(0 0% 0% / 0.1333);
       }
       .pile-outline {
         display: block;
         position: absolute;
         inset: 0;
-        border: 1px dashed var(--color-border-strong, #859585);
+        border: 1px dashed var(--color-border-strong, hsl(120 7.018% 55.294%));
         border-radius: 0.5rem;
       }
       .out-pile .pile-base {
@@ -1284,7 +1287,7 @@ export class ShitheadGame extends LitElement {
         margin: 0.7rem 0;
       }
       .card[aria-pressed="true"] {
-        outline: 3px solid var(--color-primary, #386541);
+        outline: 3px solid var(--color-primary, hsl(132 28.662% 30.784%));
         outline-offset: 3px;
       }
       .card[aria-disabled="true"] {
@@ -1294,7 +1297,7 @@ export class ShitheadGame extends LitElement {
         cursor: default;
       }
       .card[data-playable="true"] .flight-front {
-        border-color: var(--color-primary, #386541);
+        border-color: var(--color-primary, hsl(132 28.662% 30.784%));
       }
       [data-board-arriving] {
         visibility: hidden !important;
@@ -1304,7 +1307,7 @@ export class ShitheadGame extends LitElement {
       }
       .board-flight .flight-front,
       .board-flight .flight-back {
-        box-shadow: 0 0.5rem 1.2rem #0003;
+        box-shadow: 0 0.5rem 1.2rem hsl(0 0% 0% / 0.2);
       }
       .result {
         position: absolute;
@@ -1316,10 +1319,10 @@ export class ShitheadGame extends LitElement {
         display: grid;
         justify-items: center;
         gap: 0.7rem;
-        border: 1px solid var(--color-border-strong, #859585);
+        border: 1px solid var(--color-border-strong, hsl(120 7.018% 55.294%));
         border-radius: 1rem;
-        background: var(--color-surface, #f7f9f5);
-        box-shadow: 0 0.8rem 2rem #0002;
+        background: var(--color-surface, hsl(90 25% 96.863%));
+        box-shadow: 0 0.8rem 2rem hsl(0 0% 0% / 0.1333);
         text-align: center;
         z-index: 5;
       }
@@ -1338,7 +1341,7 @@ export class ShitheadGame extends LitElement {
         border: 0;
       }
       details {
-        border-top: 1px solid var(--color-border, #d0d8d0);
+        border-top: 1px solid var(--color-border, hsl(120 9.302% 83.137%));
         padding-top: 1rem;
         margin-top: 1rem;
       }
@@ -1364,11 +1367,11 @@ export class ShitheadGame extends LitElement {
         height: 1.25rem;
         flex: 0 0 auto;
         margin: 0.2rem 0 0;
-        accent-color: var(--color-primary, #386541);
+        accent-color: var(--color-primary, hsl(132 28.662% 30.784%));
       }
       .rule-help {
         display: block;
-        color: var(--color-muted, #506050);
+        color: var(--color-muted, hsl(120 9.091% 34.51%));
         margin-top: 0.25rem;
       }
       #options-panel > button {

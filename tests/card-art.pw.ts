@@ -1,12 +1,15 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { faceAssets, backAssets } from "../src/card-art-assets.js";
-import { type CardArtwork } from "../src/card-art.js";
+import { faceAssets, backAssets } from "@cardgame/card-art-assets.js";
+import { cardId } from "@cardgame/cards.js";
+import type { GameState } from "@cardgame/game-state.js";
+import { type CardArtwork } from "@cardgame/card-art.js";
 
 const settings = (page: Page) => page.locator("card-appearance");
 const imageFile = (name = "A-Spades.png") => ({
   name,
   mimeType: "image/png",
-  buffer: Buffer.from(faceAssets.wildlife["A-Spades"].split(",")[1], "base64"),
+  buffer: readFileSync(new URL(faceAssets.wildlife["A-Spades"])),
 });
 const art = (page: Page) =>
   settings(page).evaluate((node) => (node as unknown as { value: CardArtwork }).value);
@@ -14,7 +17,10 @@ const background = (page: Page, selector: string) =>
   page
     .locator(selector)
     .first()
-    .evaluate((node) => getComputedStyle(node).backgroundImage);
+    .evaluate((node) => {
+      const image = node instanceof HTMLImageElement ? node : node.querySelector("img");
+      return image?.src ?? getComputedStyle(node).backgroundImage;
+    });
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
@@ -39,12 +45,14 @@ test("built-in faces and backs render offline in both games and survive refresh"
           return image.naturalWidth > 0 && image.naturalHeight > 0;
         }),
       ),
-    [...Object.values(faceAssets).flatMap(Object.values), ...Object.values(backAssets)],
+    [...Object.values(faceAssets).flatMap(Object.values), ...Object.values(backAssets)].map(
+      (source) => `/${source.slice(source.indexOf("assets/cards/"))}`,
+    ),
   );
   expect(results.every(Boolean)).toBe(true);
   expect(await art(page)).toMatchObject({ faces: "wildlife", back: "wildlife" });
-  await expect(page.locator("card-game")).toHaveAttribute("random-backs", "");
-  await expect(page.locator("card-game #draw-card .back-mark")).toHaveCSS("visibility", "hidden");
+  await expect(page.locator("card-game #draw-card img")).toBeVisible();
+  await expect(page.locator("card-game #draw-card .back-mark")).toHaveCount(0);
   await settings(page)
     .getByRole("combobox", { name: "Card faces", exact: true })
     .selectOption("kenney");
@@ -52,10 +60,12 @@ test("built-in faces and backs render offline in both games and survive refresh"
     .getByRole("combobox", { name: "Card back", exact: true })
     .selectOption("wildlife-3");
   await settings(page).getByRole("button", { name: "Card appearance", exact: true }).click();
-  await expect(page.locator("card-game #draw-card .back-mark")).toHaveCSS("visibility", "hidden");
+  await expect(page.locator("card-game #draw-card .back-mark")).toHaveCount(0);
   await page.getByRole("button", { name: "Draw a card", exact: true }).click();
-  expect(await background(page, "card-game .hand .card-art")).toContain("data:image/png;base64");
-  expect(await background(page, "card-game #draw-card")).toContain(backAssets["wildlife-3"]);
+  expect(await background(page, "card-game .hand .card-art")).toContain("/assets/cards/");
+  expect(await background(page, "card-game #draw-card")).toContain(
+    "/assets/cards/backs/wildlife-3.png",
+  );
   const before = await page
     .locator("card-game")
     .evaluate((node) => (node as unknown as { game: unknown }).game);
@@ -74,11 +84,9 @@ test("built-in faces and backs render offline in both games and survive refresh"
   ).toEqual(before);
   await page.getByRole("tab", { name: "Shithead", exact: true }).click();
   await page.getByRole("tab", { name: "Single player", exact: true }).click();
-  expect(await background(page, "shithead-game .hand .card-art")).toContain(
-    "data:image/png;base64",
-  );
+  expect(await background(page, "shithead-game .hand .card-art")).toContain("/assets/cards/");
   expect(await background(page, "shithead-game .opponent-hand .back")).toContain(
-    backAssets["wildlife-3"],
+    "/assets/cards/backs/wildlife-3.png",
   );
   expect(
     await page
@@ -101,11 +109,9 @@ test("custom face and back uploads persist, can be cleared, and never change the
 }) => {
   const before = await page
     .locator("card-game")
-    .evaluate(
-      (node) => (node as unknown as { game: { deck: { rank: string; suit: string }[] } }).game,
-    );
+    .evaluate((node) => (node as unknown as { game: GameState }).game);
   const nextCard = before.deck.at(-1)!;
-  const id = `${nextCard.rank}-${nextCard.suit}`;
+  const id = cardId(nextCard);
   await settings(page)
     .getByRole("combobox", { name: "Card to customize", exact: true })
     .selectOption(id);
@@ -133,8 +139,8 @@ test("custom face and back uploads persist, can be cleared, and never change the
   await settings(page).getByRole("button", { name: "Remove custom back", exact: true }).click();
   await page.reload();
   expect(await art(page)).toEqual({
-    faces: "original",
-    back: "original",
+    faces: "basic",
+    back: "basic",
     customFaces: {},
     customBack: "",
   });
@@ -201,14 +207,14 @@ test("basic back color and patterns match previews and both tables, persist, and
   await settings(page).getByRole("button", { name: "Card appearance", exact: true }).click();
   await expect(
     settings(page).getByRole("combobox", { name: "Card faces", exact: true }),
-  ).toHaveValue("original");
+  ).toHaveValue("basic");
   await expect(
     settings(page)
       .getByRole("combobox", { name: "Card back", exact: true })
       .locator("option:checked"),
   ).toHaveText("Basic (HTML+CSS)");
   await expect(settings(page).getByLabel("Basic back color", { exact: true })).toHaveValue(
-    "#355342",
+    "#365443",
   );
   await settings(page).getByLabel("Basic back color", { exact: true }).fill("#8844cc");
   const pattern = settings(page).getByRole("combobox", { name: "Basic back pattern", exact: true });
@@ -232,10 +238,8 @@ test("basic back color and patterns match previews and both tables, persist, and
   const chooseBack = settings(page).getByRole("combobox", { name: "Card back", exact: true });
   await chooseBack.selectOption("wildlife");
   await expect(settings(page).getByLabel("Basic back color", { exact: true })).toHaveCount(0);
-  expect(await background(page, "shithead-game .opponent-hand .back")).toContain(
-    "data:image/png;base64",
-  );
-  await chooseBack.selectOption("original");
+  expect(await background(page, "shithead-game .opponent-hand .back")).toContain("/assets/cards/");
+  await chooseBack.selectOption("basic");
   await expect(settings(page).getByLabel("Basic back color", { exact: true })).toHaveValue(
     "#8844cc",
   );
@@ -247,14 +251,14 @@ test("secondary back color follows the main color until customized and can retur
 }) => {
   await settings(page)
     .getByRole("combobox", { name: "Card back", exact: true })
-    .selectOption("original");
+    .selectOption("basic");
   const main = settings(page).getByLabel("Basic back color", { exact: true });
   const secondary = settings(page).getByLabel("Basic back secondary color", { exact: true });
   const reset = settings(page).getByRole("button", {
     name: "Use automatic stripe color",
     exact: true,
   });
-  await expect(secondary).toHaveValue("#536d5e");
+  await expect(secondary).toHaveValue("#4b765e");
   await expect(reset).toBeDisabled();
   await main.fill("#000000");
   await expect(secondary).toHaveValue("#262626");
@@ -290,13 +294,11 @@ test("artwork follows animated draws and the play pile", async ({ page }) => {
   await page.getByRole("button", { name: "Draw a card", exact: true }).click();
   const flying = page.locator("card-game .card-flight .card-art");
   await expect(flying).toHaveCount(1);
-  expect(await flying.evaluate((node) => getComputedStyle(node).backgroundImage)).toContain(
-    "data:image/png;base64",
+  expect(await flying.evaluate((node) => (node as HTMLImageElement).src)).toContain(
+    "/assets/cards/",
   );
   await expect(page.locator("card-game .card-flight")).toHaveCount(0);
   await page.locator("card-game .hand button").click();
   await expect(page.locator("card-game .card-flight")).toHaveCount(0);
-  expect(await background(page, "card-game .played-pile .card-art")).toContain(
-    "data:image/png;base64",
-  );
+  expect(await background(page, "card-game .played-pile .card-art")).toContain("/assets/cards/");
 });

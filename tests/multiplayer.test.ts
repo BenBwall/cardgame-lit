@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { RoomService, MemoryRoomStore, type Peer } from "../server/core/rooms.js";
-import { defineGame } from "../server/core/adapter.js";
-import { games } from "../server/games/registry.js";
-import { shitheadAdapter } from "../server/games/shithead.js";
+import { RoomService, MemoryRoomStore, type Peer } from "@server/core/rooms.js";
+import { defineGame } from "@server/core/adapter.js";
+import { games } from "@server/games/registry.js";
+import { shitheadAdapter } from "@server/games/shithead.js";
 import { counterAdapter } from "./fixtures/counter.js";
-import type { Admission, ServerMessage } from "../src/multiplayer/protocol.js";
-import { serverUrl } from "../src/multiplayer/protocol.js";
-import { cardId } from "../src/cards.js";
-import { autoShithead, DEFAULT_SHITHEAD_RULES } from "../src/shithead-state.js";
+import type { Admission, ServerMessage } from "@cardgame/multiplayer/protocol.js";
+import { serverUrl } from "@cardgame/multiplayer/protocol.js";
+import { cardId } from "@cardgame/cards.js";
+import { autoShithead, DEFAULT_SHITHEAD_RULES } from "@cardgame/shithead-state.js";
 
 function harness(gameId = "test-counter", options: unknown = { target: 2 }) {
   let time = 1_000;

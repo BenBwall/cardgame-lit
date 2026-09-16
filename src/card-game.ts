@@ -1,10 +1,11 @@
-import { cardTableStyles } from "./card-table-styles.js";
+import { cardTableStyles } from "@cardgame/card-table-styles.js";
 import { LitElement, html, nothing } from "lit";
-import { ArrowDown, ArrowUp, ArrowRight, ArrowLeft, Grid3x3, PlayingCards } from "@lucide/icons";
+import { Grid3x3, PlayingCards } from "@lucide/icons";
+import { flipOptions, type HandLayout } from "@cardgame/card-options.js";
 import { buildLucideSvg } from "@lucide/icons/build";
 import { repeat } from "lit/directives/repeat.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { type Card, type SortOrder, cardId, cardName } from "./cards.js";
+import { type Card, type SortOrder, cardId, cardName } from "@cardgame/cards.js";
 import {
   type CardArtwork,
   defaultArtwork,
@@ -14,9 +15,10 @@ import {
   type BackAssignments,
   newBackAssignments,
   isBackAssignments,
-  cardBackStyle,
-} from "./card-art.js";
-import "./card-appearance.js";
+  backContents,
+  readArtwork,
+} from "@cardgame/card-art.js";
+import "@cardgame/card-appearance.js";
 import {
   type GameState,
   drawCard,
@@ -24,14 +26,14 @@ import {
   newGame,
   playCard,
   reorderHand,
-} from "./game-state.js";
-import { HandDrag } from "./hand-drag.js";
-import { CardMotion } from "./card-motion.js";
-import { fanLayout } from "./hand-layout.js";
-import { HandSizeMotion } from "./hand-size-motion.js";
-import "./shithead-game.js";
-import "./multiplayer/online-lobby.js";
-import { onlineGames } from "./multiplayer/shithead-ui.js";
+} from "@cardgame/game-state.js";
+import { HandDrag } from "@cardgame/hand-drag.js";
+import { CardMotion } from "@cardgame/card-motion.js";
+import { fanLayout } from "@cardgame/hand-layout.js";
+import { HandSizeMotion } from "@cardgame/hand-size-motion.js";
+import "@cardgame/shithead-game.js";
+import "@cardgame/multiplayer/online-lobby.js";
+import { onlineGames } from "@cardgame/multiplayer/shithead-ui.js";
 import {
   gameStorageKey,
   readSavedGame,
@@ -39,14 +41,9 @@ import {
   isFreeGame,
   isSortOrder,
   record,
-} from "./saved-game.js";
+} from "@cardgame/saved-game.js";
 
-const flipOptions = [
-  { label: "Top to bottom", icon: ArrowDown, axis: "X", startAngle: 180 },
-  { label: "Bottom to top", icon: ArrowUp, axis: "X", startAngle: -180 },
-  { label: "Left to right", icon: ArrowRight, axis: "Y", startAngle: -180 },
-  { label: "Right to left", icon: ArrowLeft, axis: "Y", startAngle: 180 },
-] as const;
+type HistoryEntry = { game: GameState; sortOrder: SortOrder };
 
 /** Import this module once, then use <card-game> anywhere on a static page. */
 export class CardGame extends LitElement {
@@ -66,23 +63,23 @@ export class CardGame extends LitElement {
     handLayout: { state: true },
     flipDirection: { state: true },
     handWidth: { state: true },
-  };
+  } as const;
 
   private game: GameState | undefined;
   storageKey = "";
   multiplayerUrl = "";
   private artwork: CardArtwork = defaultArtwork();
   private artworkError = "";
-  private backAssignments: BackAssignments = {};
+  private backAssignments!: BackAssignments;
   private restored = false;
   private saveFailed = false;
   private mode: "free-play" | "shithead" | "online" = "free-play";
   private shitheadMode: "shithead" | "online" = "shithead";
-  private history: { game: GameState; sortOrder: SortOrder }[] = [];
+  private history: HistoryEntry[] = [];
   private sortOrder: SortOrder = "draw-order";
   private message = "Draw a card to begin.";
   private confirmingReset = false;
-  private handLayout: "fan" | "grid" = "fan";
+  private handLayout: HandLayout = "fan";
   private flipDirection = 0;
   private handWidth = 600;
   private resizeObserver?: ResizeObserver;
@@ -102,7 +99,7 @@ export class CardGame extends LitElement {
     if (!this.restored) {
       this.restored = true;
       const art = readSavedGame(`${this.storageKey}:artwork`);
-      if (isArtwork(art)) this.artwork = art;
+      this.artwork = readArtwork(art) ?? defaultArtwork();
       applyArtwork(this, this.artwork);
       const saved = readSavedGame(this.storageKey);
       this.backAssignments =
@@ -311,9 +308,11 @@ export class CardGame extends LitElement {
 
   private cardFace(card: Card) {
     return html`<span class="flight-flipper" aria-hidden="true">
-      <span class="card face flight-front" data-suit=${card.suit}> ${faceContents(card)} </span>
-      <span class="card back flight-back" style=${cardBackStyle(card, this.backAssignments)}
-        ><span class="back-mark">✦</span></span
+      <span class="card face flight-front" data-suit=${card.suit}>
+        ${faceContents(card, this.artwork)}
+      </span>
+      <span class="card back flight-back"
+        >${backContents(this.artwork, card, this.backAssignments)}</span
       >
     </span>`;
   }
@@ -485,7 +484,7 @@ export class CardGame extends LitElement {
             aria-labelledby="single-player-tab"
             ?hidden=${this.mode !== "shithead"}
           >
-            ${this.mode === "shithead" ? html`<shithead-game .storageKey=${`${this.storageKey}:shithead`} .randomBacks=${this.artwork.back === "wildlife"}></shithead-game>` : nothing}
+            ${this.mode === "shithead" ? html`<shithead-game .storageKey=${`${this.storageKey}:shithead`} .artwork=${this.artwork}></shithead-game>` : nothing}
           </div>
           <div
             id="multiplayer-panel"
@@ -565,7 +564,6 @@ export class CardGame extends LitElement {
         <div class="pile">
           <button
             id="draw-card"
-            style=${cardBackStyle(deck.at(-1), this.backAssignments)}
             class="card back"
             type="button"
             aria-label="Draw a card"
@@ -574,7 +572,7 @@ export class CardGame extends LitElement {
           >
             ${
               deck.length
-                ? html`<span class="back-mark" aria-hidden="true">✦</span>`
+                ? backContents(this.artwork, deck.at(-1), this.backAssignments)
                 : html`<span aria-hidden="true">Empty</span>`
             }
           </button>

@@ -1,7 +1,10 @@
 import type { ServerWebSocket } from "bun";
-import { PROTOCOL_VERSION, isRecord } from "../src/multiplayer/protocol.js";
-import { Fault, RoomService, type Peer } from "./core/rooms.js";
-import { games } from "./games/registry.js";
+import { PROTOCOL_VERSION, isRecord } from "@cardgame/multiplayer/protocol.js";
+import { Fault, RoomService, type Peer } from "@server/core/rooms.js";
+import { games } from "@server/games/registry.js";
+
+type TlsOptions = { cert: ReturnType<typeof Bun.file>; key: ReturnType<typeof Bun.file> };
+type RateBucket = { count: number; creates: number; reset: number };
 
 type SocketData = {
   code: string;
@@ -15,14 +18,14 @@ export type ServerOptions = {
   hostname?: string;
   origins?: readonly string[];
   service?: RoomService;
-  tls?: { cert: ReturnType<typeof Bun.file>; key: ReturnType<typeof Bun.file> };
+  tls?: TlsOptions;
 };
 
 /** Bun's uWebSockets-backed server provides bounded frames, backpressure and TLS. */
 export function startServer(options: ServerOptions = {}) {
   const service = options.service ?? new RoomService(games);
   const origins = new Set(options.origins ?? ["https://people.arcada.fi"]);
-  const buckets = new Map<string, { count: number; creates: number; reset: number }>();
+  const buckets = new Map<string, RateBucket>();
   const timer = setInterval(() => {
     service.cleanup();
     for (const [ip, bucket] of buckets) if (bucket.reset <= Date.now()) buckets.delete(ip);

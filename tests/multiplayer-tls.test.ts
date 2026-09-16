@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, unlink, rmdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startServer } from "../server/http.js";
+import { startServer } from "@server/http.js";
 
 const openssl = Bun.which("openssl");
 test.skipIf(!openssl)(

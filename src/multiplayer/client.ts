@@ -4,7 +4,7 @@ import {
   type Command,
   type RoomView,
   type ServerMessage,
-} from "./protocol.js";
+} from "@cardgame/multiplayer/protocol.js";
 
 export type ConnectionState = "idle" | "connecting" | "connected" | "reconnecting" | "closed";
 class RequestError extends Error {

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { newGame, drawCard, playCard } from "../src/game-state.js";
-import { cardId } from "../src/cards.js";
-import { newShithead, startShithead, autoShithead } from "../src/shithead-state.js";
-import { isFreeGame, isShitheadGame, isSortOrder, isRules } from "../src/saved-game.js";
+import { newGame, drawCard, playCard } from "@cardgame/game-state.js";
+import { cardId } from "@cardgame/cards.js";
+import { newShithead, startShithead, autoShithead } from "@cardgame/shithead-state.js";
+import { isFreeGame, isShitheadGame, isSortOrder, isRules } from "@cardgame/saved-game.js";
 
 test("free-play saves require a full unique deck and a valid hand order", () => {
   const game = drawCard(newGame());

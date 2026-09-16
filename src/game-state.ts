@@ -1,4 +1,11 @@
-import { type Card, type SortOrder, cardId, createDeck, shuffle, sortCards } from "./cards.js";
+import {
+  type Card,
+  type SortOrder,
+  cardId,
+  createDeck,
+  shuffle,
+  sortCards,
+} from "@cardgame/cards.js";
 
 export type GameState = Readonly<{
   deck: readonly Card[];

@@ -1,14 +1,14 @@
 import { html } from "lit";
-import { cardName } from "../cards.js";
-import { DEFAULT_SHITHEAD_RULES, type ShitheadRules } from "../shithead-state.js";
-import type { LobbyGame } from "./online-lobby.js";
-import type { OnlineShitheadView } from "./shithead-view.js";
+import { cardName } from "@cardgame/cards.js";
+import { DEFAULT_SHITHEAD_RULES, type ShitheadRules } from "@cardgame/shithead-state.js";
+import type { LobbyGame } from "@cardgame/multiplayer/online-lobby.js";
+import type { OnlineShitheadView } from "@cardgame/multiplayer/shithead-view.js";
 
-const rules: [keyof ShitheadRules, string][] = [
+const rules = [
   ["voluntaryPickup", "Allow voluntary pile pickup"],
   ["playAgainAfterTwo", "Play again after a 2"],
   ["revealUncovered", "Reveal uncovered face-down cards"],
-];
+] as const satisfies readonly (readonly [keyof ShitheadRules, string])[];
 export const onlineGames = [
   {
     id: "shithead",
@@ -147,4 +147,4 @@ export const onlineGames = [
       </div>`;
     },
   },
-] satisfies readonly LobbyGame[];
+] as const satisfies readonly LobbyGame[];

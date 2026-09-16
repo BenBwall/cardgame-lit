@@ -1,10 +1,10 @@
 import { randomInt } from "node:crypto";
-import { cardId } from "../../src/cards.js";
-import { isRecord } from "../../src/multiplayer/protocol.js";
+import { cardId } from "@cardgame/cards.js";
+import { isRecord } from "@cardgame/multiplayer/protocol.js";
 import type {
   OnlineShitheadAction,
   OnlineShitheadView,
-} from "../../src/multiplayer/shithead-view.js";
+} from "@cardgame/multiplayer/shithead-view.js";
 import {
   DEFAULT_SHITHEAD_RULES,
   newShithead,
@@ -17,8 +17,8 @@ import {
   shitheadSource,
   type ShitheadRules,
   type ShitheadState,
-} from "../../src/shithead-state.js";
-import type { GameAdapter } from "../core/adapter.js";
+} from "@cardgame/shithead-state.js";
+import type { GameAdapter } from "@server/core/adapter.js";
 
 type State = { game: ShitheadState; ready: readonly boolean[] };
 const integer = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0;

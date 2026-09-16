@@ -1,10 +1,10 @@
-import { startServer } from "../server/http.js";
-import { RoomService } from "../server/core/rooms.js";
-import { defineGame } from "../server/core/adapter.js";
-import { games } from "../server/games/registry.js";
+import { startServer } from "@server/http.js";
+import { RoomService } from "@server/core/rooms.js";
+import { defineGame } from "@server/core/adapter.js";
+import { games } from "@server/games/registry.js";
 import { counterAdapter } from "../tests/fixtures/counter.js";
-import { shitheadAdapter } from "../server/games/shithead.js";
-import { newShithead } from "../src/shithead-state.js";
+import { shitheadAdapter } from "@server/games/shithead.js";
+import { newShithead } from "@cardgame/shithead-state.js";
 
 // Reproducible browser deal; production still uses cryptographic randomness.
 const browserShithead = defineGame({

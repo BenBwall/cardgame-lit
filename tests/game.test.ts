@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { cardId, createDeck, shuffle, sortCards } from "../src/cards.js";
-import { drawCard, handCards, newGame, playCard, reorderHand } from "../src/game-state.js";
+import { cardId, createDeck, shuffle, sortCards } from "@cardgame/cards.js";
+import { drawCard, handCards, newGame, playCard, reorderHand } from "@cardgame/game-state.js";
 
 describe("local card table", () => {
   test("reordering preserves every card, immutable snapshots, and original draw order", () => {

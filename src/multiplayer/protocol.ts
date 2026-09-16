@@ -1,6 +1,7 @@
 /** Versioned, game-independent wire protocol. Names are presentation only. */
 export const PROTOCOL_VERSION = 1;
 export type Admission = { code: string; playerId: string; credential: string; expiresAt: number };
+export type RoomPlayer = { id: string; username: string; connected: boolean; rematch: boolean };
 export type RoomView<View = unknown> = {
   code: string;
   gameId: string;
@@ -9,7 +10,7 @@ export type RoomView<View = unknown> = {
   phase: "waiting" | "playing" | "finished";
   self: string;
   creator: string;
-  players: { id: string; username: string; connected: boolean; rematch: boolean }[];
+  players: RoomPlayer[];
   options: unknown;
   state: View | null;
   expiresAt: number;

@@ -1,10 +1,10 @@
-import { cardId } from "./cards.js";
-import { cardGeometry } from "./card-geometry.js";
-import type { GameState } from "./game-state.js";
+import { cardId } from "@cardgame/cards.js";
+import { cardGeometry } from "@cardgame/card-geometry.js";
+import type { GameState } from "@cardgame/game-state.js";
+
+import type { FlipAxis, DrawFlip } from "@cardgame/card-options.js";
 
 type Zone = "deck" | "hand" | "played";
-type FlipAxis = "X" | "Y";
-type DrawFlip = { axis: FlipAxis; startAngle: 180 | -180 };
 type Pose = {
   node: HTMLElement;
   x: number;
@@ -35,18 +35,18 @@ const zones = (game: GameState) => {
 const transform = (x: number, y: number, angle: number) =>
   `translate3d(${x}px, ${y}px, 0) rotate(${angle}deg)`;
 
+type FlightAnchor = Pick<Pose, "x" | "y" | "angle">;
+type Flight = {
+  node: HTMLElement;
+  stop: () => void;
+  retarget: (from: Pose, to: Pose) => void;
+  anchor: FlightAnchor;
+};
+
 /** Animate the visual cards while game state and controls remain immediately usable. */
 export class CardMotion {
   private version = 0;
-  private flights = new Map<
-    string,
-    {
-      node: HTMLElement;
-      stop: () => void;
-      retarget: (from: Pose, to: Pose) => void;
-      anchor: { x: number; y: number; angle: number };
-    }
-  >();
+  private flights = new Map<string, Flight>();
   private shuffle?: Animation;
   private preference?: MediaQueryList;
 
@@ -71,7 +71,7 @@ export class CardMotion {
 
   finish = (): void => {
     this.version++;
-    for (const flight of [...this.flights.values()]) flight.stop();
+    for (const flight of this.flights.values()) flight.stop();
     this.shuffle?.cancel();
     this.shuffle = undefined;
   };
@@ -302,7 +302,7 @@ export class CardMotion {
     );
     const surfaces = [...node.querySelectorAll<HTMLElement>(".flight-front, .flight-back")];
     const shadows = surfaces.map((surface) => {
-      const shadow = from.flying ? from.shadow : "0 0.5rem 1.5rem #0004";
+      const shadow = from.flying ? from.shadow : "0 0.5rem 1.5rem hsl(0 0% 0% / 0.2667)";
       const animation = surface.animate(
         [{ boxShadow: shadow }, { boxShadow: shadow, offset: 0.65 }, { boxShadow: to.shadow }],
         { duration, easing: "ease-in-out", fill: "both" },

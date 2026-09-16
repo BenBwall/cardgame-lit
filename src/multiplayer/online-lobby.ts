@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
-import { OnlineClient } from "./client.js";
-import type { RoomView } from "./protocol.js";
+import { OnlineClient } from "@cardgame/multiplayer/client.js";
+import type { RoomView } from "@cardgame/multiplayer/protocol.js";
 
 export interface LobbyGame {
   id: string;
@@ -19,7 +19,7 @@ export class OnlineLobby extends LitElement {
     options: { state: true },
     error: { state: true },
     copied: { state: true },
-  };
+  } as const;
   serverUrl = "";
   games: readonly LobbyGame[] = [];
   private selected = "";

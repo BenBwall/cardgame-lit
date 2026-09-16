@@ -1,4 +1,4 @@
-import { startServer } from "./http.js";
+import { startServer } from "@server/http.js";
 
 const development = process.env.MULTIPLAYER_DEV === "1";
 const cert = process.env.TLS_CERT,

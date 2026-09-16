@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { DragMotion } from "../src/drag-motion.js";
+import { DragMotion } from "@cardgame/drag-motion.js";
 
 test("lean follows horizontal direction symmetrically, then reverses with inertia", () => {
   const right = new DragMotion(0, 0, 0, -1);

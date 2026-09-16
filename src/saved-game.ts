@@ -1,6 +1,6 @@
-import { type Card, type SortOrder, RANKS, SUITS, cardId } from "./cards.js";
-import type { GameState } from "./game-state.js";
-import type { ShitheadState, ShitheadRules } from "./shithead-state.js";
+import { type Card, type SortOrder, RANKS, SUITS, cardId } from "@cardgame/cards.js";
+import type { GameState } from "@cardgame/game-state.js";
+import type { ShitheadState, ShitheadRules } from "@cardgame/shithead-state.js";
 
 type RecordValue = Record<string, unknown>;
 export const record = (value: unknown): value is RecordValue =>

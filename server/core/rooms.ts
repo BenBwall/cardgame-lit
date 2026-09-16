@@ -4,8 +4,8 @@ import {
   type Admission,
   type RoomView,
   type ServerMessage,
-} from "../../src/multiplayer/protocol.js";
-import type { GameInstance, RegisteredGame } from "./adapter.js";
+} from "@cardgame/multiplayer/protocol.js";
+import type { GameInstance, RegisteredGame } from "@server/core/adapter.js";
 
 export class Fault extends Error {
   constructor(
@@ -20,6 +20,10 @@ export interface Peer {
   close(code: number, reason: string): void;
 }
 type Ack = Extract<ServerMessage, { type: "ack" }>;
+type ConnectionTicket = { hash: string; origin: string; expiresAt: number };
+type AuthorizedPlayer = { room: Room; player: Player };
+type TicketIdentity = { code: string; playerId: string };
+
 export type Player = {
   id: string;
   username: string;
@@ -30,7 +34,7 @@ export type Player = {
   sequence: number;
   lastAck?: Ack;
   rematch: boolean;
-  ticket?: { hash: string; origin: string; expiresAt: number };
+  ticket?: ConnectionTicket;
   messages: number;
   windowStart: number;
 };
@@ -81,14 +85,14 @@ export type Limits = {
   heartbeatMs: number;
   maxRooms: number;
 };
-const defaults: Limits = {
+const defaults = {
   idleMs: 30 * 60_000,
   lifetimeMs: 2 * 60 * 60_000,
   reconnectMs: 2 * 60_000,
   ticketMs: 20_000,
   heartbeatMs: 45_000,
   maxRooms: 500,
-};
+} as const satisfies Limits;
 const digest = (secret: string) => createHash("sha256").update(secret).digest("hex");
 const secret = () => randomBytes(32).toString("base64url");
 const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -201,7 +205,7 @@ export class RoomService {
       throw new Fault("Room is full or already playing.", 409);
     return this.addPlayer(room, name);
   }
-  authorize(code: unknown, playerId: unknown, credential: unknown): { room: Room; player: Player } {
+  authorize(code: unknown, playerId: unknown, credential: unknown): AuthorizedPlayer {
     const room = this.room(code);
     const player = room.players.find((p) => p.id === playerId);
     if (
@@ -221,7 +225,7 @@ export class RoomService {
     player.ticket = { hash: digest(ticket), origin, expiresAt: this.now() + this.limits.ticketMs };
     return ticket;
   }
-  consumeTicket(code: unknown, ticket: string, origin: string): { code: string; playerId: string } {
+  consumeTicket(code: unknown, ticket: string, origin: string): TicketIdentity {
     const room = this.room(code);
     const player =
       ticket.length === 43

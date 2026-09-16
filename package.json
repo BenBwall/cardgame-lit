@@ -16,8 +16,8 @@
     }
   },
   "scripts": {
-    "build": "tsc && bun scripts/build-demo.ts",
-    "check": "tsc --noEmit && tsc --project server/tsconfig.json",
+    "build": "tsc && bun scripts/build-package.ts && bun scripts/build-demo.ts",
+    "check": "tsc --noEmit && tsc --project server/tsconfig.json && tsc --project tests/tsconfig.json",
     "server": "bun server/main.ts",
     "server:dev": "bun --env-file=server/development.env server/main.ts",
     "test": "bun test tests",

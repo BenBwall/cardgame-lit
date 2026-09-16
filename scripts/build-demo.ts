@@ -1,5 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { serverUrl } from "../src/multiplayer/protocol.js";
+import { cp, mkdir, writeFile } from "node:fs/promises";
+import { serverUrl } from "@cardgame/multiplayer/protocol.js";
 
 const multiplayerUrl = process.env.MULTIPLAYER_URL ? serverUrl(process.env.MULTIPLAYER_URL) : "";
 
@@ -11,6 +11,7 @@ const result = await Bun.build({
 });
 if (!result.success) throw new Error(result.logs.map((log) => log.message).join("\n"));
 await mkdir("demo", { recursive: true });
+await cp("src/assets", "demo/assets", { recursive: true });
 await writeFile(
   "demo/index.html",
   `<!doctype html>

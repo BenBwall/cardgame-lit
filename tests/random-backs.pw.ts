@@ -1,9 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
-import { type BackAssignments } from "../src/card-art.js";
-import { backAssets } from "../src/card-art-assets.js";
-import { type GameState } from "../src/game-state.js";
-import { type ShitheadState } from "../src/shithead-state.js";
-import { cardId } from "../src/cards.js";
+import { type BackAssignments } from "@cardgame/card-art.js";
+import { backAssets as assetUrls } from "@cardgame/card-art-assets.js";
+import { type GameState } from "@cardgame/game-state.js";
+import { type ShitheadState } from "@cardgame/shithead-state.js";
+import { cardId } from "@cardgame/cards.js";
+
+const backAssets = Object.fromEntries(
+  Object.entries(assetUrls).map(([id, source]) => [
+    id,
+    `/${source.slice(source.indexOf("assets/cards/"))}`,
+  ]),
+);
 
 const settings = (page: Page) => page.locator("card-appearance");
 const assignments = (page: Page, selector = "card-game") =>
@@ -32,13 +39,17 @@ test("Kenney faces, backs and previews remove the square sprite gutters", async 
   ).toBeGreaterThan(1.45);
   await settings(page).getByRole("button", { name: "Card appearance", exact: true }).click();
   await page.getByRole("button", { name: "Draw a card", exact: true }).click();
-  for (const selector of ["card-game .hand .card-art", "card-game #draw-card"]) {
+  for (const selector of ["card-game .hand .card-art", "card-game #draw-card img"]) {
     const [width, height] = await page
       .locator(selector)
       .first()
-      .evaluate((node) => getComputedStyle(node).backgroundSize.split(" ").map(parseFloat));
-    expect(width).toBeCloseTo((64 / 42) * 100, 2);
-    expect(height).toBeCloseTo((64 / 60) * 100, 2);
+      .evaluate((node) => {
+        const image = node.getBoundingClientRect();
+        const frame = node.parentElement!;
+        return [(image.width / frame.clientWidth) * 100, (image.height / frame.clientHeight) * 100];
+      });
+    expect(width).toBeCloseTo((64 / 42) * 100, 1);
+    expect(height).toBeCloseTo((64 / 60) * 100, 1);
   }
 });
 test("free-play random backs follow each card and persist until a new deck", async ({ page }) => {
@@ -54,22 +65,20 @@ test("free-play random backs follow each card and persist until a new deck", asy
     .evaluate((node) => (node as unknown as { game: GameState }).game);
   const expected = backAssets[before[cardId(state.deck.at(-1)!)]];
   expect(
-    await page.locator("#draw-card").evaluate((node) => getComputedStyle(node).backgroundImage),
+    await page.locator("#draw-card").evaluate((node) => node.querySelector("img")!.src),
   ).toContain(expected);
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.getByRole("button", { name: "Draw a card", exact: true }).click();
   const flight = page.locator("card-game .card-flight .flight-back");
   await expect(flight).toHaveCount(1);
-  expect(await flight.evaluate((node) => getComputedStyle(node).backgroundImage)).toContain(
-    expected,
-  );
+  expect(await flight.evaluate((node) => node.querySelector("img")!.src)).toContain(expected);
   await expect(page.locator("card-game .card-flight")).toHaveCount(0);
   await page.reload();
   expect(await assignments(page)).toEqual(before);
   expect(
     await page
       .locator("card-game .hand .flight-back")
-      .evaluate((node) => getComputedStyle(node).backgroundImage),
+      .evaluate((node) => node.querySelector("img")!.src),
   ).toContain(expected);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Undo", exact: true }).click();
@@ -100,20 +109,20 @@ test("Shithead keeps each hidden card's back across refreshes and mode switches"
   const state = await game.evaluate((node) => (node as unknown as { game: ShitheadState }).game);
   const backs = await game
     .locator(".opponent-hand .back")
-    .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).backgroundImage));
+    .evaluateAll((nodes) => nodes.map((node) => node.querySelector("img")!.src));
   for (const [i, card] of state.players[1].hand.entries())
     expect(backs[i]).toContain(backAssets[before[cardId(card)]]);
   expect(
     await game
       .locator('[data-board-zone="stock"]')
-      .evaluate((node) => getComputedStyle(node).backgroundImage),
+      .evaluate((node) => node.querySelector("img")!.src),
   ).toContain(backAssets[before[cardId(state.stock.at(-1)!)]]);
   await page.reload();
   expect(await assignments(page, "shithead-game")).toEqual(before);
   expect(
     await game
       .locator(".opponent-hand .back")
-      .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).backgroundImage)),
+      .evaluateAll((nodes) => nodes.map((node) => node.querySelector("img")!.src)),
   ).toEqual(backs);
   await page.getByRole("tab", { name: "Free play", exact: true }).click();
   await page.getByRole("tab", { name: "Shithead", exact: true }).click();
@@ -169,7 +178,7 @@ test("computer draw animations keep the individual backs of all incoming hidden 
   const flights = game.locator(".board-flight.back");
   await expect(flights).toHaveCount(3);
   const images = await flights.evaluateAll((nodes) =>
-    nodes.map((node) => getComputedStyle(node).backgroundImage),
+    nodes.map((node) => node.querySelector("img")!.src),
   );
   for (const card of drawn)
     expect(images.some((image) => image.includes(backAssets[backs[cardId(card)]]))).toBe(true);

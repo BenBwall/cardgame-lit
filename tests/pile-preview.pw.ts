@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { createDeck, cardName } from "../src/cards.js";
-import { DEFAULT_SHITHEAD_RULES, type ShitheadState } from "../src/shithead-state.js";
+import { createDeck, cardName } from "@cardgame/cards.js";
+import { DEFAULT_SHITHEAD_RULES, type ShitheadState } from "@cardgame/shithead-state.js";
 
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });

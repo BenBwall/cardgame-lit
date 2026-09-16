@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createDeck, cardId, type Card } from "../src/cards.js";
-import { DEFAULT_SHITHEAD_RULES, type ShitheadState } from "../src/shithead-state.js";
+import { createDeck, cardId, type Card } from "@cardgame/cards.js";
+import { DEFAULT_SHITHEAD_RULES, type ShitheadState } from "@cardgame/shithead-state.js";
 
 const c = (rank: Card["rank"], suit: Card["suit"] = "Clubs"): Card => ({ rank, suit });
 const fullState = (): ShitheadState => {
@@ -196,6 +196,7 @@ test("a pending computer turn resumes once after refresh", async ({ page }) => {
 test("refresh during a flight restores its committed move without replaying it", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1100, height: 1500 });
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.getByRole("tab", { name: "Shithead", exact: true }).click();
   await page.getByRole("tab", { name: "Single player", exact: true }).click();
@@ -212,6 +213,8 @@ test("refresh during a flight restores its committed move without replaying it",
       initial.players[1],
     ],
   });
+  // Flush media-query and resize callbacks before testing an active flight.
+  await page.clock.runFor(100);
   await game(page).getByRole("button", { name: "Play 2 of Clubs", exact: true }).click();
   await expect.poll(() => game(page).locator(".board-flight").count()).toBeGreaterThan(0);
   const after = await state(page);

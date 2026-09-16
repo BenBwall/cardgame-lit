@@ -7,19 +7,19 @@ export const cardTableStyles = css`
     flex-wrap: wrap;
     gap: 0.25rem;
     margin-bottom: 1rem;
-    border-bottom: 1px solid var(--color-border, #d0d8d0);
+    border-bottom: 1px solid var(--color-border, hsl(120 9.302% 83.137%));
   }
   .game-tabs [role="tab"] {
     border: 0;
     border-bottom: 2px solid transparent;
     border-radius: 0;
     background: transparent;
-    color: var(--color-muted, #506050);
+    color: var(--color-muted, hsl(120 9.091% 34.51%));
     margin-bottom: -1px;
   }
   .game-tabs [role="tab"][aria-selected="true"] {
     border-bottom-color: currentColor;
-    color: var(--color-text, #202820);
+    color: var(--color-text, hsl(120 11.111% 14.118%));
     font-weight: 600;
   }
   .subtabs {
@@ -29,7 +29,7 @@ export const cardTableStyles = css`
   :host {
     display: block;
     min-width: 0;
-    color: var(--color-text, #202820);
+    color: var(--color-text, hsl(120 11.111% 14.118%));
     font-family: inherit;
   }
   * {
@@ -37,9 +37,9 @@ export const cardTableStyles = css`
   }
   .game {
     padding: clamp(1rem, 3vw, 2rem);
-    border: 1px solid var(--color-border, #d0d8d0);
+    border: 1px solid var(--color-border, hsl(120 9.302% 83.137%));
     border-radius: 1rem;
-    background: var(--color-surface, #f7f9f5);
+    background: var(--color-surface, hsl(90 25% 96.863%));
   }
   .toolbar,
   .controls,
@@ -59,7 +59,7 @@ export const cardTableStyles = css`
   .status,
   details,
   .empty-hand {
-    color: var(--color-muted, #506050);
+    color: var(--color-muted, hsl(120 9.091% 34.51%));
   }
   .mode {
     margin: 0;
@@ -69,9 +69,9 @@ export const cardTableStyles = css`
   select {
     font: inherit;
     color: inherit;
-    border: 1px solid var(--color-border-strong, #859585);
+    border: 1px solid var(--color-border-strong, hsl(120 7.018% 55.294%));
     border-radius: 0.5rem;
-    background: var(--color-background, #fff);
+    background: var(--color-background, hsl(0 0% 100%));
     padding: 0.5rem 0.75rem;
     min-height: 2.75rem;
   }
@@ -86,18 +86,18 @@ export const cardTableStyles = css`
   }
   button:hover:not(:disabled),
   select:hover {
-    border-color: var(--color-text, #202820);
+    border-color: var(--color-text, hsl(120 11.111% 14.118%));
   }
   button:focus-visible,
   select:focus-visible,
   summary:focus-visible {
-    outline: 3px solid var(--color-primary, #386541);
+    outline: 3px solid var(--color-primary, hsl(132 28.662% 30.784%));
     outline-offset: 4px;
   }
   .reset {
     margin-top: 1rem;
     padding: 0.75rem;
-    border: 1px solid var(--color-border, #d0d8d0);
+    border: 1px solid var(--color-border, hsl(120 9.302% 83.137%));
     border-radius: 0.5rem;
   }
   .table {
@@ -107,7 +107,7 @@ export const cardTableStyles = css`
     margin-block: 1.5rem;
     padding: 1.5rem 1rem;
     border-radius: 0.75rem;
-    background: var(--color-hover, #e9efe7);
+    background: var(--color-hover, hsl(105 20% 92.157%));
   }
   .pile {
     display: grid;
@@ -130,14 +130,14 @@ export const cardTableStyles = css`
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    color: #202820;
-    background: #fffdf8;
-    border: 1px solid #778273;
+    color: hsl(120 11.111% 14.118%);
+    background: hsl(42.857 100% 98.627%);
+    border: 1px solid hsl(104 6.122% 48.039%);
     font-weight: 700;
   }
   .face[data-suit="Hearts"],
   .face[data-suit="Diamonds"] {
-    color: #af2537;
+    color: hsl(352.174 65.094% 41.569%);
   }
   .rank {
     align-self: flex-start;
@@ -151,15 +151,31 @@ export const cardTableStyles = css`
     width: 100%;
     height: 100%;
   }
-  .card-art {
+  .face-labels[hidden] {
+    display: none;
+  }
+  .card-art,
+  .card-back-art {
     position: absolute;
     inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
     border-radius: inherit;
-    background-size: var(--card-art-size, 100% 100%);
-    background-position: center;
-    background-repeat: no-repeat;
-    image-rendering: var(--card-art-rendering, auto);
     pointer-events: none;
+  }
+  /* Kenney's 64px sprites have a centered 42 by 60px card. */
+  .kenney-art {
+    inset: 50% auto auto 50%;
+    width: calc(100% * 64 / 42);
+    height: calc(100% * 64 / 60);
+    transform: translate(-50%, -50%);
+    image-rendering: pixelated;
+  }
+  .face,
+  .back,
+  .preview-card {
+    overflow: hidden;
   }
   .suit {
     align-self: center;
@@ -171,30 +187,31 @@ export const cardTableStyles = css`
     transform: rotate(180deg);
   }
   .back {
-    color: var(--card-back-ink, #fffdf8);
+    position: relative;
+    color: var(--card-back-ink, hsl(42.857 100% 98.627%));
     background-image: var(
-      --card-back-image,
-      repeating-linear-gradient(45deg, #355342 0px, #355342 5px, #42634e 5px, #42634e 7px)
+      --card-back-pattern,
+      repeating-linear-gradient(
+        45deg,
+        hsl(146 22.059% 26.667%) 0px,
+        hsl(146 22.059% 26.667%) 5px,
+        hsl(141.818 20% 32.353%) 5px,
+        hsl(141.818 20% 32.353%) 7px
+      )
     );
-    background-size: var(--card-back-size, 100% 100%);
     background-position: center;
-    border: 3px double #d8e4d8;
+    border: 3px double hsl(120 18.182% 87.059%);
     font-size: 1.75rem;
   }
   .back:disabled {
     font-size: 0.875rem;
   }
-  .back-mark {
-    visibility: var(--card-back-mark-visibility, visible);
-  }
-  :host([random-backs]) .back {
-    background-image: var(--card-random-back-image, var(--card-back-image));
-  }
+
   .empty {
     display: grid;
     place-content: center;
     text-align: center;
-    border: 1px dashed var(--color-border-strong, #859585);
+    border: 1px dashed var(--color-border-strong, hsl(120 7.018% 55.294%));
   }
   h3 {
     margin: 0;
@@ -257,7 +274,7 @@ export const cardTableStyles = css`
   }
   .hand-help {
     font-size: 0.875rem;
-    color: var(--color-muted, #506050);
+    color: var(--color-muted, hsl(120 9.091% 34.51%));
     line-height: 1.5;
   }
   .hand[data-dragging] > li > .card {
@@ -274,7 +291,7 @@ export const cardTableStyles = css`
     top: -0.25rem;
     bottom: -0.25rem;
     z-index: 101;
-    background: var(--color-primary, #386541);
+    background: var(--color-primary, hsl(132 28.662% 30.784%));
     border-radius: 2px;
   }
   .card[data-drop-side="before"]::after {
@@ -291,7 +308,7 @@ export const cardTableStyles = css`
     z-index: 100;
     pointer-events: none;
     margin: 0;
-    box-shadow: 0 0.5rem 1.5rem #0004;
+    box-shadow: 0 0.5rem 1.5rem hsl(0 0% 0% / 0.2667);
     will-change: transform;
     cursor: grabbing;
   }
@@ -324,7 +341,7 @@ export const cardTableStyles = css`
     backface-visibility: hidden;
   }
   .drag-preview .flight-front {
-    box-shadow: 0 0.5rem 1.5rem #0004;
+    box-shadow: 0 0.5rem 1.5rem hsl(0 0% 0% / 0.2667);
   }
   .flight-back {
     display: grid;
@@ -351,7 +368,7 @@ export const cardTableStyles = css`
     position: relative;
     gap: 0.125rem;
     padding: 0.125rem;
-    border: 1px solid var(--color-border, #d0d8d0);
+    border: 1px solid var(--color-border, hsl(120 9.302% 83.137%));
     border-radius: 0.625rem;
   }
   .layout-switch::before {
@@ -361,7 +378,7 @@ export const cardTableStyles = css`
     left: 0.125rem;
     width: 2.5rem;
     border-radius: 0.5rem;
-    background: var(--color-hover, #e9efe7);
+    background: var(--color-hover, hsl(105 20% 92.157%));
     pointer-events: none;
     transform: translateX(0);
     transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -392,10 +409,10 @@ export const cardTableStyles = css`
     padding: 0.375rem;
     border: 0;
     background: transparent;
-    color: var(--color-muted, #506050);
+    color: var(--color-muted, hsl(120 9.091% 34.51%));
   }
   .layout-switch button[aria-pressed="true"] {
-    color: var(--color-text, #202820);
+    color: var(--color-text, hsl(120 11.111% 14.118%));
   }
   .layout-switch svg {
     width: 1.5rem;
@@ -412,8 +429,8 @@ export const cardTableStyles = css`
     z-index: 200;
     padding: 0.375rem 0.625rem;
     border-radius: 0.375rem;
-    color: var(--color-background, #fff);
-    background: var(--color-text, #202820);
+    color: var(--color-background, hsl(0 0% 100%));
+    background: var(--color-text, hsl(120 11.111% 14.118%));
     font-size: 0.75rem;
     white-space: nowrap;
     visibility: hidden;
@@ -431,7 +448,7 @@ export const cardTableStyles = css`
     font-size: 0.875rem;
   }
   details {
-    border-top: 1px solid var(--color-border, #d0d8d0);
+    border-top: 1px solid var(--color-border, hsl(120 9.302% 83.137%));
     padding-top: 0.875rem;
     font-size: 0.875rem;
     line-height: 1.6;

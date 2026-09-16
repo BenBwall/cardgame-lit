@@ -1,4 +1,4 @@
-import { type Card, RANKS, cardId, cardName, createDeck, shuffle } from "./cards.js";
+import { type Card, RANKS, cardId, cardName, createDeck, shuffle } from "@cardgame/cards.js";
 
 export type ShitheadRules = Readonly<{
   voluntaryPickup: boolean;
@@ -212,7 +212,7 @@ export function playShithead(
   const remaining = available.filter((_, index) => !indices.includes(index));
   let nextPlayer: ShitheadPlayer = { ...player, [source]: remaining };
   if (source !== "hand") {
-    const playedIds = new Set(cards.map(cardId));
+    const playedIds: ReadonlySet<string> = new Set(cards.map(cardId));
     const revealed: Card[] = [];
     const tableSlots = shitheadSlots(player).map((slot) => {
       if (source === "faceDown")

@@ -1,5 +1,36 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+// Compare decoded channels: img compositing may round an edge channel by one
+// when its WAAPI transform is removed. A shifted pixel produces a larger delta.
+const maxPixelDifference = (page: Page, before: Buffer, after: Buffer) =>
+  page.evaluate(
+    async ({ before, after }) => {
+      const decode = (bytes: number[]) =>
+        createImageBitmap(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
+      const images = await Promise.all([decode(before), decode(after)]);
+      try {
+        if (images[0].width !== images[1].width || images[0].height !== images[1].height)
+          return 255;
+        const canvas = document.createElement("canvas");
+        canvas.width = images[0].width;
+        canvas.height = images[0].height;
+        const context = canvas.getContext("2d")!;
+        const pixels = images.map((image) => {
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0);
+          return context.getImageData(0, 0, canvas.width, canvas.height).data;
+        });
+        return pixels[0].reduce(
+          (max, value, index) => Math.max(max, Math.abs(value - pixels[1][index])),
+          0,
+        );
+      } finally {
+        images.forEach((image) => image.close());
+      }
+    },
+    { before: [...before], after: [...after] },
+  );
+
 const cards = (page: Page) => page.locator(".hand button");
 const settled = (page: Page) => expect(page.locator(".card-flight")).toHaveCount(0);
 const order = (page: Page) =>
@@ -191,8 +222,16 @@ test("a full fan hand fits narrow screens and both layouts respect reduced motio
   }
 });
 
-test("fan cards land at their resting angles without a final pixel shift", async ({ page }) => {
+test("fan cards land at their resting angles without a final pixel shift", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1100, height: 1500 });
   await page.goto("/");
+  await page
+    .locator("card-game")
+    .evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
   await page.locator("card-game").evaluate(async (host) => {
     const root = host.shadowRoot!;
     for (let i = 0; i < 7; i++) {
@@ -206,6 +245,23 @@ test("fan cards land at their resting angles without a final pixel shift", async
       }
     }
   });
+  // Let ResizeObserver start the reserved-space animation before waiting for it.
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  await expect
+    .poll(() =>
+      page.locator(".hand-region").evaluate((node) => {
+        const content = node.querySelector(".hand-content")!;
+        return Math.abs(
+          node.getBoundingClientRect().height - content.getBoundingClientRect().height,
+        );
+      }),
+    )
+    .toBeLessThan(0.1);
+  await expect
+    .poll(() => page.locator(".hand-region").evaluate((node) => node.getAnimations().length))
+    .toBe(0);
   const bounds = (await page.locator(".hand").boundingBox())!;
   const clip = {
     x: Math.floor(bounds.x),
@@ -213,15 +269,18 @@ test("fan cards land at their resting angles without a final pixel shift", async
     width: Math.ceil(bounds.width),
     height: Math.ceil(bounds.height),
   };
-  await expect
-    .poll(() => page.locator(".hand-region").evaluate((node) => node.getAnimations().length))
-    .toBe(0);
   const before = await page.screenshot({ clip });
   await page.locator(".card-flight").evaluateAll((nodes) => {
     for (const node of nodes) node.getAnimations()[0].finish();
   });
   await settled(page);
-  expect((await page.screenshot({ clip })).equals(before)).toBe(true);
+  const after = await page.screenshot({ clip });
+  const difference = await maxPixelDifference(page, before, after);
+  if (difference > 1) {
+    await testInfo.attach("before", { body: before, contentType: "image/png" });
+    await testInfo.attach("after", { body: after, contentType: "image/png" });
+  }
+  expect(difference).toBeLessThanOrEqual(1);
 });
 
 test("a tilted fan supports native touch dragging and tapping", async ({

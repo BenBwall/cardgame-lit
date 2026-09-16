@@ -1,6 +1,6 @@
 # Card artwork
 
-Both downloaded packs are offered under CC0 (public domain). Their original PNG images are embedded unchanged as data URLs in `src/card-art-assets.ts`, so built-in artwork needs no third-party requests. The game's original CSS faces and green back remain available.
+Both downloaded packs are offered under CC0 (public domain). Their original PNG images are stored unchanged in `src/assets/cards/` and rendered with `<img>` elements. The build copies them alongside the JavaScript, so built-in artwork needs no third-party requests. The game's basic CSS faces and green back remain available.
 
 ## Kenney Playing Cards Pack
 

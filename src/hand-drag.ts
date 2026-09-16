@@ -1,5 +1,5 @@
-import { DragMotion } from "./drag-motion.js";
-import { cardGeometry } from "./card-geometry.js";
+import { DragMotion } from "@cardgame/drag-motion.js";
+import { cardGeometry } from "@cardgame/card-geometry.js";
 
 const DRAG_DISTANCE = 6;
 

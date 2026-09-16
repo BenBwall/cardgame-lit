@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { type ShitheadState, DEFAULT_SHITHEAD_RULES } from "../src/shithead-state.js";
+import { type ShitheadState, DEFAULT_SHITHEAD_RULES } from "@cardgame/shithead-state.js";
 
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });

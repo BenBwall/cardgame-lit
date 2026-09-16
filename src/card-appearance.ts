@@ -1,9 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
-import { cardTableStyles } from "./card-table-styles.js";
+import { cardTableStyles } from "@cardgame/card-table-styles.js";
 import {
   type CardArtwork,
   defaultArtwork,
+  isFaceStyle,
+  isBackStyle,
+  isBasicBackPattern,
+  isCardId,
   faceChoices,
   backChoices,
   faceImage,
@@ -17,8 +21,14 @@ import {
   basicBackStripeColor,
   basicBackPatterns,
   defaultBasicBackColor,
-} from "./card-art.js";
-import { createDeck, cardId, cardName } from "./cards.js";
+} from "@cardgame/card-art.js";
+import { colorFromHex, colorToHex } from "@cardgame/card-colors.js";
+import { createDeck, cardId, cardName, type CardId } from "@cardgame/cards.js";
+
+type UploadKind = "back" | "face" | "deck";
+type ArtworkDraft = { -readonly [Key in keyof CardArtwork]: CardArtwork[Key] } & {
+  customFaces: Partial<Record<CardId, string>>;
+};
 
 export class CardAppearance extends LitElement {
   static properties = {
@@ -28,12 +38,12 @@ export class CardAppearance extends LitElement {
     message: { state: true },
     targetCard: { state: true },
     expanded: { state: true },
-  };
+  } as const;
   value: CardArtwork = defaultArtwork();
   saveError = "";
   private uploading = false;
   private message = "";
-  private targetCard = "A-Spades";
+  private targetCard: CardId = "A-Spades";
   private expanded = false;
   private choose(value: CardArtwork): void {
     this.message = "";
@@ -41,7 +51,7 @@ export class CardAppearance extends LitElement {
       new CustomEvent("artwork-change", { detail: value, bubbles: true, composed: true }),
     );
   }
-  private async upload(event: Event, kind: "back" | "face" | "deck"): Promise<void> {
+  private async upload(event: Event, kind: UploadKind): Promise<void> {
     const input = event.target as HTMLInputElement,
       files = [...(input.files ?? [])];
     if (!files.length || this.uploading) return;
@@ -50,7 +60,7 @@ export class CardAppearance extends LitElement {
     const target = this.targetCard;
     try {
       if (files.length > 52) throw new Error("Choose at most 52 card images at once.");
-      const next = { ...this.value, customFaces: { ...this.value.customFaces } };
+      const next: ArtworkDraft = { ...this.value, customFaces: { ...this.value.customFaces } };
       const seen = new Set<string>();
       for (const file of files) {
         const id = kind === "deck" ? cardIdFromFilename(file.name) : target;
@@ -137,7 +147,10 @@ export class CardAppearance extends LitElement {
               >Card faces<select
                 aria-label="Card faces"
                 .value=${live(this.value.faces)}
-                @change=${(e: Event) => this.choose({ ...this.value, faces: (e.target as HTMLSelectElement).value })}
+                @change=${(e: Event) => {
+                  const value = (e.target as HTMLSelectElement).value;
+                  if (isFaceStyle(value)) this.choose({ ...this.value, faces: value });
+                }}
               >
                 ${faceChoices.map((c) => html`<option value=${c.id} ?selected=${this.value.faces === c.id}>${c.label}</option>`)}
               </select></label
@@ -146,26 +159,33 @@ export class CardAppearance extends LitElement {
               >Card back<select
                 aria-label="Card back"
                 .value=${live(this.value.back)}
-                @change=${(e: Event) => this.choose({ ...this.value, back: (e.target as HTMLSelectElement).value })}
+                @change=${(e: Event) => {
+                  const value = (e.target as HTMLSelectElement).value;
+                  if (isBackStyle(value)) this.choose({ ...this.value, back: value });
+                }}
               >
                 ${backChoices.map((c) => html`<option value=${c.id} ?selected=${this.value.back === c.id} ?disabled=${c.id === "custom" && !this.value.customBack}>${c.label}</option>`)}
               </select></label
             >
             ${
-              this.value.back === "original"
+              this.value.back === "basic"
                 ? html` <label
                       >Basic back color
                       <input
                         type="color"
-                        .value=${live(this.value.basicBackColor ?? defaultBasicBackColor)}
-                        @input=${(event: Event) => this.choose({ ...this.value, basicBackColor: (event.target as HTMLInputElement).value })}
+                        .value=${live(colorToHex(this.value.basicBackColor ?? defaultBasicBackColor))}
+                        @input=${(event: Event) => this.choose({ ...this.value, basicBackColor: colorFromHex((event.target as HTMLInputElement).value) })}
                       />
                     </label>
                     <label
                       >Basic back pattern
                       <select
                         .value=${live(this.value.basicBackPattern ?? "diagonal")}
-                        @change=${(event: Event) => this.choose({ ...this.value, basicBackPattern: (event.target as HTMLSelectElement).value as CardArtwork["basicBackPattern"] })}
+                        @change=${(event: Event) => {
+                          const pattern = (event.target as HTMLSelectElement).value;
+                          if (isBasicBackPattern(pattern))
+                            this.choose({ ...this.value, basicBackPattern: pattern });
+                        }}
                       >
                         ${basicBackPatterns.map((pattern) => html`<option value=${pattern} ?selected=${(this.value.basicBackPattern ?? "diagonal") === pattern}>${pattern === "plain" ? "Plain (no stripes)" : `${pattern[0].toUpperCase()}${pattern.slice(1)} stripes`}</option>`)}
                       </select>
@@ -178,8 +198,8 @@ export class CardAppearance extends LitElement {
                               <input
                                 type="color"
                                 aria-describedby="secondary-color-help"
-                                .value=${live(basicBackStripeColor(this.value))}
-                                @input=${(event: Event) => this.choose({ ...this.value, basicBackSecondaryColor: (event.target as HTMLInputElement).value })}
+                                .value=${live(colorToHex(basicBackStripeColor(this.value)))}
+                                @input=${(event: Event) => this.choose({ ...this.value, basicBackSecondaryColor: colorFromHex((event.target as HTMLInputElement).value) })}
                               />
                             </label>
                             <p id="secondary-color-help">
@@ -204,7 +224,7 @@ export class CardAppearance extends LitElement {
                 role="img"
                 aria-label=${`Face preview: ${cardName(example)}`}
               >
-                ${front ? html`<img class=${this.value.faces === "kenney" ? "kenney-art" : ""} src=${front} alt="" />` : faceContents(example)}
+                ${front ? html`<img class=${this.value.faces === "kenney" ? "kenney-art" : ""} src=${front} alt="" />` : faceContents(example, this.value)}
               </div>
               <div
                 class="art-sample basic-back"
@@ -237,7 +257,8 @@ export class CardAppearance extends LitElement {
                 aria-label="Card to customize"
                 .value=${this.targetCard}
                 @change=${(e: Event) => {
-                  this.targetCard = (e.target as HTMLSelectElement).value;
+                  const id = (e.target as HTMLSelectElement).value;
+                  if (isCardId(id)) this.targetCard = id;
                 }}
               >
                 ${createDeck().map((c) => html`<option value=${cardId(c)} ?selected=${this.targetCard === cardId(c)}>${cardName(c)}</option>`)}
@@ -282,14 +303,14 @@ export class CardAppearance extends LitElement {
               <button
                 type="button"
                 ?disabled=${!Object.keys(this.value.customFaces).length}
-                @click=${() => this.choose({ ...this.value, faces: "original", customFaces: {} })}
+                @click=${() => this.choose({ ...this.value, faces: "basic", customFaces: {} })}
               >
                 Clear custom faces
               </button>
               <button
                 type="button"
                 ?disabled=${!this.value.customBack}
-                @click=${() => this.choose({ ...this.value, back: "original", customBack: "" })}
+                @click=${() => this.choose({ ...this.value, back: "basic", customBack: "" })}
               >
                 Remove custom back
               </button>
@@ -331,11 +352,11 @@ export class CardAppearance extends LitElement {
         padding: 1rem 0.65rem;
         min-width: 2.75rem;
         border-radius: 0 0.6rem 0.6rem 0;
-        background: var(--color-surface, #f7f9f5);
-        box-shadow: 0 2px 8px #0002;
+        background: var(--color-surface, hsl(90 25% 96.863%));
+        box-shadow: 0 2px 8px hsl(0 0% 0% / 0.1333);
       }
       .appearance-tab[aria-expanded="true"] {
-        background: var(--color-background, #fff);
+        background: var(--color-background, hsl(0 0% 100%));
       }
       .appearance {
         position: fixed;
@@ -346,12 +367,12 @@ export class CardAppearance extends LitElement {
         max-height: calc(100dvh - 2rem);
         overflow: auto;
         overscroll-behavior: contain;
-        color: var(--color-text, #202820);
-        background: var(--color-surface, #f7f9f5);
-        border: 1px solid var(--color-border, #d0d8d0);
+        color: var(--color-text, hsl(120 11.111% 14.118%));
+        background: var(--color-surface, hsl(90 25% 96.863%));
+        border: 1px solid var(--color-border, hsl(120 9.302% 83.137%));
         border-radius: 0.75rem;
         padding: 1rem;
-        box-shadow: 0 8px 32px #0003;
+        box-shadow: 0 8px 32px hsl(0 0% 0% / 0.2);
       }
       .appearance-heading {
         display: flex;
@@ -374,7 +395,7 @@ export class CardAppearance extends LitElement {
         gap: 0.8rem;
         min-width: 0;
         padding: 1rem;
-        border: 1px solid var(--color-border, #d0d8d0);
+        border: 1px solid var(--color-border, hsl(120 9.302% 83.137%));
         border-radius: 0.5rem;
         margin: 0;
       }
@@ -405,10 +426,10 @@ export class CardAppearance extends LitElement {
         place-items: center;
         width: 4.5rem;
         height: 6.5rem;
-        border: 1px solid #778273;
+        border: 1px solid hsl(104 6.122% 48.039%);
         border-radius: 0.4rem;
-        background: #fffdf8;
-        color: #202820;
+        background: hsl(42.857 100% 98.627%);
+        color: hsl(120 11.111% 14.118%);
         overflow: hidden;
         text-align: center;
         font-size: 0.8rem;
@@ -437,13 +458,13 @@ export class CardAppearance extends LitElement {
         width: 3rem;
         height: 2.75rem;
         padding: 0.2rem;
-        border: 1px solid var(--color-border-strong, #859585);
+        border: 1px solid var(--color-border-strong, hsl(120 7.018% 55.294%));
         border-radius: 0.5rem;
-        background: var(--color-background, #fff);
+        background: var(--color-background, hsl(0 0% 100%));
         cursor: pointer;
       }
       .basic-back:not(:has(img)) {
-        border: 3px double #d8e4d8;
+        border: 3px double hsl(120 18.182% 87.059%);
         font-size: 1.75rem;
       }
       a {

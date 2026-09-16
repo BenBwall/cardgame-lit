@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
-import { startServer } from "../server/http.js";
-import type { Admission, ServerMessage } from "../src/multiplayer/protocol.js";
+import { startServer } from "@server/http.js";
+import type { Admission, ServerMessage } from "@cardgame/multiplayer/protocol.js";
 
 const origin = "https://people.arcada.fi";
 async function until(check: () => boolean) {

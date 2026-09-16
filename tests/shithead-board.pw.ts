@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { type ShitheadState, DEFAULT_SHITHEAD_RULES } from "../src/shithead-state.js";
+import { type ShitheadState, DEFAULT_SHITHEAD_RULES } from "@cardgame/shithead-state.js";
 
 const fixture = (): ShitheadState => ({
   rules: { ...DEFAULT_SHITHEAD_RULES, playAgainAfterTwo: true },

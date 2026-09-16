@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { type Card, cardId } from "../src/cards.js";
+import { type Card, cardId } from "@cardgame/cards.js";
 import {
   type ShitheadPlayer,
   type ShitheadState,
@@ -13,7 +13,7 @@ import {
   playShithead,
   startShithead,
   swapShithead,
-} from "../src/shithead-state.js";
+} from "@cardgame/shithead-state.js";
 
 const card = (rank: Card["rank"], suit: Card["suit"] = "Clubs"): Card => ({ rank, suit });
 const player = (
