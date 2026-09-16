@@ -47,12 +47,17 @@ export function serverConfiguration(
   env: Environment,
   development = isDevelopment(env),
 ): ServerConfiguration {
+  const tlsMode = env.MULTIPLAYER_TLS_MODE ?? "direct";
+  if (tlsMode !== "direct" && tlsMode !== "proxy")
+    throw new Error("MULTIPLAYER_TLS_MODE must be direct or proxy.");
   const cert = env.TLS_CERT,
     key = env.TLS_KEY;
+  if (tlsMode === "proxy" && (cert || key))
+    throw new Error("Unset TLS_CERT and TLS_KEY when MULTIPLAYER_TLS_MODE=proxy.");
   if (!!cert !== !!key) throw new Error("Set TLS_CERT and TLS_KEY together.");
-  if (!development && (!cert || !key))
+  if (!development && tlsMode === "direct" && (!cert || !key))
     throw new Error(
-      "Production requires TLS_CERT and TLS_KEY. For loopback development use bun run server:dev.",
+      "Production requires TLS_CERT and TLS_KEY, or MULTIPLAYER_TLS_MODE=proxy behind an HTTPS proxy. For loopback development use bun run server:dev.",
     );
   const hostname = env.MULTIPLAYER_HOST ?? (development ? "127.0.0.1" : "0.0.0.0");
   if (development && !isLoopbackHost(hostname))
@@ -61,7 +66,7 @@ export function serverConfiguration(
     hostname,
     port: configuredPort(
       env.MULTIPLAYER_PORT ?? env.PORT,
-      development ? DEFAULT_MULTIPLAYER_PORT : DEFAULT_TLS_PORT,
+      development || tlsMode === "proxy" ? DEFAULT_MULTIPLAYER_PORT : DEFAULT_TLS_PORT,
     ),
     origins: allowedOrigins(
       env.MULTIPLAYER_ORIGINS,

@@ -2,6 +2,38 @@ import { expect, test } from "bun:test";
 import { multiplayerUrl } from "@cardgame/multiplayer/config.js";
 import { serverConfiguration } from "@server/config.js";
 
+test("proxy TLS is explicit, uses the platform port and retains production defaults", () => {
+  const env = { MULTIPLAYER_TLS_MODE: "proxy", PORT: "8080" };
+  expect(serverConfiguration(env, false)).toEqual({
+    hostname: "0.0.0.0",
+    port: 8080,
+    origins: ["https://people.arcada.fi"],
+    tls: undefined,
+  });
+  expect(serverConfiguration({ MULTIPLAYER_TLS_MODE: "proxy" }, false).port).toBe(8787);
+  expect(serverConfiguration({ ...env, MULTIPLAYER_PORT: "9000" }, false).port).toBe(9000);
+  expect(multiplayerUrl(env, false)).toBe("");
+  expect(() => serverConfiguration({ MULTIPLAYER_TLS_MODE: "direct" }, false)).toThrow("TLS_CERT");
+  expect(() =>
+    serverConfiguration({ PORT: "8080", RAILWAY_ENVIRONMENT_NAME: "production" }, false),
+  ).toThrow("TLS_CERT");
+  for (const mode of ["", "off", "true", "Proxy"])
+    expect(() => serverConfiguration({ MULTIPLAYER_TLS_MODE: mode }, false)).toThrow(
+      "MULTIPLAYER_TLS_MODE",
+    );
+  for (const tls of [
+    { TLS_CERT: "cert.pem" },
+    { TLS_KEY: "key.pem" },
+    { TLS_CERT: "cert.pem", TLS_KEY: "key.pem" },
+  ])
+    expect(() => serverConfiguration({ ...env, ...tls }, false)).toThrow(
+      "Unset TLS_CERT and TLS_KEY",
+    );
+  expect(() => serverConfiguration({ ...env, MULTIPLAYER_HOST: "0.0.0.0" }, true)).toThrow(
+    "loopback",
+  );
+});
+
 test("development defaults to loopback and keeps frontend and game ports separate", () => {
   expect(multiplayerUrl({}, true)).toBe("http://127.0.0.1:8787");
   expect(multiplayerUrl({ PORT: "4176" }, true)).toBe("http://127.0.0.1:8787");
