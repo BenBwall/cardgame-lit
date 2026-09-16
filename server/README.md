@@ -57,6 +57,29 @@ The default production browser origin is `https://people.arcada.fi`; override it
 
 `GET /health` returns `{ "status": "ok", "protocol": 1 }` without room/player data. Termination signals close sessions gracefully. All rooms are in memory and disappear on restart. Run one process/replica; sticky routing alone does not make this store distributed. For multiple replicas, implement atomic room transactions and cross-process socket delivery before scaling.
 
+### Railway infrastructure as code
+
+[`railway-backend.ts`](../railway-backend.ts) declares a `cardgame-backend` service sourced from `BenBwall/cardgame-lit` on `main`. It builds `server/Dockerfile` from the repository root, starts the production backend in proxy TLS mode on port 8787, checks `/health`, and keeps one replica running with sleeping disabled. Railway manages public HTTPS/WSS; certificate files are not needed. Restarting or deploying still ends active games.
+
+Install Railway CLI 5.42.1 or newer. The pinned `railway` development dependency provides the TypeScript IaC SDK and is installed by `bun install`. The IaC file is included in `bun run check`.
+
+Create a dedicated Railway project/environment for this backend, authorize Railway's GitHub integration to read the repository, and run these commands from the cardgame checkout:
+
+```sh
+bun install --frozen-lockfile
+railway login
+railway link
+bun run railway:plan
+bun run railway:apply
+railway domain --service cardgame-backend --port 8787
+```
+
+The scripts use `railway config plan --file railway-backend.ts` and `railway config apply --file railway-backend.ts`. Planning reads the linked environment; applying changes it after showing the plan. This file describes the whole target environment, so omitted services or variables can be removed. Use a dedicated environment and check the plan before applying to existing resources. Do not run it directly with `bun railway-backend.ts`; it exports configuration for the Railway CLI.
+
+Generated Railway domains are managed separately from the IaC file. After creating the domain, check `https://<generated-domain>/health` and set `MULTIPLAYER_PROD_URL=https://<generated-domain>` in the homepage's build environment, then rebuild and publish the homepage. Set additional allowed browser origins by editing `MULTIPLAYER_ORIGINS` in the IaC file and applying again. Source pushes to `main` deploy application changes; changes to the IaC file itself need another plan/apply.
+
+See Railway's [IaC guide](https://docs.railway.com/infrastructure-as-code), [TypeScript reference](https://docs.railway.com/infrastructure-as-code/reference), and [CLI commands](https://docs.railway.com/cli/config).
+
 ## Protocol and security boundaries
 
 - `POST /rooms`: `{ gameId, options, username }` creates a room. `POST /rooms/:code/join`: `{ username }` takes a seat. Codes normalize to uppercase. Names are trimmed display strings (1–32 characters, no control/format characters); duplicates are explicitly allowed.

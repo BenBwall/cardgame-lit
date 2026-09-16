@@ -9,5 +9,11 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["./**/*.ts", "../scripts/*.ts", "../tests/multiplayer*.ts", "../tests/fixtures/*.ts"]
+  "include": [
+    "./**/*.ts",
+    "../scripts/*.ts",
+    "../tests/multiplayer*.ts",
+    "../tests/fixtures/*.ts",
+    "../railway-backend.ts"
+  ]
 }
