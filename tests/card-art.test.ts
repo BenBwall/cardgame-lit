@@ -7,6 +7,7 @@ import {
   cardIdFromFilename,
   newBackAssignments,
   isBackAssignments,
+  basicBackStripeColor,
 } from "../src/card-art.js";
 
 test("both alternative decks have all 52 cards and 14 PNG backs", () => {
@@ -36,6 +37,34 @@ test("custom artwork validates image data, known cards, sizes and file names", (
   expect(cardIdFromFilename("a_spades.PNG")).toBe("A-Spades");
   expect(cardIdFromFilename("10-Hearts.jpg")).toBe("10-Hearts");
   expect(cardIdFromFilename("back.png")).toBeUndefined();
+});
+
+test("GreyWyvern defaults and validated basic-back settings preserve legacy artwork", () => {
+  const art = defaultArtwork();
+  expect(art).toMatchObject({ faces: "wildlife", back: "wildlife" });
+  expect(isArtwork({ faces: "original", back: "original", customFaces: {}, customBack: "" })).toBe(
+    true,
+  );
+  for (const basicBackPattern of ["diagonal", "vertical", "horizontal", "plain"])
+    expect(isArtwork({ ...art, basicBackColor: "#AABBCC", basicBackPattern })).toBe(true);
+  for (const basicBackColor of [
+    null,
+    42,
+    "red",
+    "#fff",
+    "#gggggg",
+    "url(https://example.com)",
+    "#123456;display:none",
+  ])
+    expect(isArtwork({ ...art, basicBackColor })).toBe(false);
+  for (const basicBackPattern of [null, 45, "dots", "url(https://example.com)"])
+    expect(isArtwork({ ...art, basicBackPattern })).toBe(false);
+  expect(isArtwork({ ...art, basicBackSecondaryColor: "#aAbBcC" })).toBe(true);
+  for (const basicBackSecondaryColor of [null, 42, "", "red", "#fff", "url(https://example.com)"])
+    expect(isArtwork({ ...art, basicBackSecondaryColor })).toBe(false);
+  expect(basicBackStripeColor(art)).toBe("#536d5e");
+  expect(basicBackStripeColor({ ...art, basicBackColor: "#000000" })).toBe("#262626");
+  expect(basicBackStripeColor({ ...art, basicBackColor: "#ffffff" })).toBe("#ffffff");
 });
 
 test("random backs assign every card once and validate saved assignments", () => {

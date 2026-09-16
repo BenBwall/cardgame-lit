@@ -8,21 +8,27 @@ export type CardArtwork = {
   back: string;
   customFaces: Record<string, string>;
   customBack: string;
+  // Optional so artwork saved before basic-back customization remains valid.
+  basicBackColor?: string;
+  basicBackSecondaryColor?: string;
+  basicBackPattern?: "diagonal" | "vertical" | "horizontal" | "plain";
 };
+export const basicBackPatterns = ["diagonal", "vertical", "horizontal", "plain"] as const;
+export const defaultBasicBackColor = "#355342";
 export const defaultArtwork = (): CardArtwork => ({
-  faces: "original",
-  back: "original",
+  faces: "wildlife",
+  back: "wildlife",
   customFaces: {},
   customBack: "",
 });
 export const faceChoices = [
-  { id: "original", label: "Original" },
+  { id: "original", label: "Basic (HTML+CSS)" },
   { id: "kenney", label: "Kenney · Pixel" },
   { id: "wildlife", label: "GreyWyvern · Wildlife" },
   { id: "custom", label: "Custom faces" },
 ];
 export const backChoices = [
-  { id: "original", label: "Original · Green" },
+  { id: "original", label: "Basic (HTML+CSS)" },
   { id: "kenney", label: "Kenney · Pixel blue" },
   { id: "wildlife", label: "GreyWyvern · Random per card" },
   ..."123456789abcd"
@@ -43,6 +49,13 @@ export function isArtwork(value: unknown): value is CardArtwork {
     record(value.customFaces) &&
     Object.entries(value.customFaces).every(([id, data]) => cardIds.has(id) && imageData(data)) &&
     (value.customBack === "" || imageData(value.customBack)) &&
+    (value.basicBackColor === undefined ||
+      (typeof value.basicBackColor === "string" && /^#[\da-f]{6}$/i.test(value.basicBackColor))) &&
+    (value.basicBackSecondaryColor === undefined ||
+      (typeof value.basicBackSecondaryColor === "string" &&
+        /^#[\da-f]{6}$/i.test(value.basicBackSecondaryColor))) &&
+    (value.basicBackPattern === undefined ||
+      basicBackPatterns.some((p) => p === value.basicBackPattern)) &&
     JSON.stringify(value).length <= 2_000_000
   );
 }
@@ -54,6 +67,31 @@ export const backImage = (art: CardArtwork): string =>
   art.back === "custom"
     ? art.customBack
     : (backAssets[art.back === "wildlife" ? "wildlife-1" : art.back] ?? "");
+export function basicBackStripeColor(art: CardArtwork): string {
+  if (art.basicBackSecondaryColor) return art.basicBackSecondaryColor;
+  const color = art.basicBackColor ?? defaultBasicBackColor;
+  // The color picker needs hex; match the existing 15% white sRGB mix.
+  return `#${[1, 3, 5]
+    .map((offset) =>
+      Math.round(parseInt(color.slice(offset, offset + 2), 16) * 0.85 + 255 * 0.15)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+export function basicBackBackground(art: CardArtwork): string {
+  const color = art.basicBackColor ?? defaultBasicBackColor;
+  const pattern = art.basicBackPattern ?? "diagonal";
+  if (pattern === "plain") return `linear-gradient(${color}, ${color})`;
+  const angle = { diagonal: 45, vertical: 90, horizontal: 0 }[pattern];
+  const secondary = art.basicBackSecondaryColor ?? `color-mix(in srgb, ${color}, white 15%)`;
+  return `repeating-linear-gradient(${angle}deg, ${color} 0px, ${color} 5px, ${secondary} 5px, ${secondary} 7px)`;
+}
+export function basicBackInk(art: CardArtwork): string {
+  const color = art.basicBackColor ?? defaultBasicBackColor;
+  const [r, g, b] = [1, 3, 5].map((offset) => parseInt(color.slice(offset, offset + 2), 16));
+  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#202820" : "#fffdf8";
+}
 export type BackAssignments = Record<string, string>;
 const randomBackIds = "123456789abcd".split("").map((id) => `wildlife-${id}`);
 export const newBackAssignments = (random = Math.random): BackAssignments =>
@@ -95,8 +133,8 @@ export function applyArtwork(host: HTMLElement, art: CardArtwork): void {
     host.style.setProperty("--card-back-ink", "transparent");
     host.style.setProperty("--card-back-mark-visibility", "hidden");
   } else {
-    host.style.removeProperty("--card-back-image");
-    host.style.removeProperty("--card-back-ink");
+    host.style.setProperty("--card-back-image", basicBackBackground(art));
+    host.style.setProperty("--card-back-ink", basicBackInk(art));
     host.style.removeProperty("--card-back-mark-visibility");
   }
   host.style.setProperty("--card-art-rendering", art.faces === "kenney" ? "pixelated" : "auto");

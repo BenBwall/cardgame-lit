@@ -15,7 +15,8 @@ test("Shithead setup, keyboard play, hidden cards, computer turns and reset work
     Math.random = () => 0.5;
   });
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   const game = page.locator("shithead-game");
   await context.setOffline(true);
   const hand = game.getByRole("list", { name: "Your hand", exact: true });
@@ -54,7 +55,7 @@ test("Shithead setup, keyboard play, hidden cards, computer turns and reset work
   await game.getByRole("button", { name: "New game", exact: true }).click();
   await game.getByRole("button", { name: "Deal new game", exact: true }).click();
   await expect(game.getByRole("button", { name: "Start game", exact: true })).toBeVisible();
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("free-play");
+  await page.getByRole("tab", { name: "Free play", exact: true }).click();
   await page.getByRole("button", { name: "Draw a card" }).click();
   await expect(page.getByRole("heading", { name: "Your hand (1)" })).toBeVisible();
   expect(errors).toEqual([]);
@@ -64,7 +65,8 @@ test("matching sets burn, blind failures pick up, and the final card ends the ga
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   const game = page.locator("shithead-game");
   const setState = async (state: ShitheadState) => {
     await game.evaluate((element, value) => {
@@ -139,15 +141,15 @@ test("matching sets burn, blind failures pick up, and the final card ends the ga
 test("leaving pauses a pending computer turn and reentry resumes it", async ({ page }) => {
   await page.goto("/");
   await page.clock.install();
-  const mode = page.getByRole("combobox", { name: "Game", exact: true });
-  await mode.selectOption("shithead");
+  const mode = page.getByRole("tablist", { name: "Game", exact: true });
+  await mode.getByRole("tab", { name: "Shithead", exact: true }).click();
   await page.locator("shithead-game").evaluate((element) => {
     const game = element as unknown as { game: ShitheadState };
     game.game = { ...game.game, phase: "playing", turn: 1 };
   });
-  await mode.selectOption("free-play");
+  await mode.getByRole("tab", { name: "Free play", exact: true }).click();
   await page.clock.fastForward(1000);
-  await mode.selectOption("shithead");
+  await mode.getByRole("tab", { name: "Shithead", exact: true }).click();
   await expect(page.getByRole("button", { name: "Start game", exact: true })).toHaveCount(0);
   await page.clock.fastForward(1000);
   await expect(page.getByRole("status")).toContainText("Computer played");
@@ -157,7 +159,8 @@ test("Options tabs support keyboard navigation, setup edits, paused turns and ne
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   const game = page.locator("shithead-game");
   await game.getByRole("tab", { name: "Table", exact: true }).focus();
   await page.keyboard.press("ArrowRight");
@@ -222,7 +225,8 @@ test("rule controls prevent voluntary pickup and reveal the exact card below a p
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   const game = page.locator("shithead-game");
   await game.getByRole("tab", { name: "Options", exact: true }).click();
   await game.getByRole("checkbox", { name: "Allow voluntary pile pickup", exact: true }).uncheck();

@@ -13,7 +13,7 @@ const assignments = (page: Page, selector = "card-game") =>
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
-  await settings(page).getByText("Card appearance", { exact: true }).click();
+  await settings(page).getByRole("button", { name: "Card appearance", exact: true }).click();
 });
 test("Kenney faces, backs and previews remove the square sprite gutters", async ({ page }) => {
   await settings(page)
@@ -30,7 +30,7 @@ test("Kenney faces, backs and previews remove the square sprite gutters", async 
       return rect.width / frame.width;
     }),
   ).toBeGreaterThan(1.45);
-  await settings(page).getByText("Card appearance", { exact: true }).click();
+  await settings(page).getByRole("button", { name: "Card appearance", exact: true }).click();
   await page.getByRole("button", { name: "Draw a card", exact: true }).click();
   for (const selector of ["card-game .hand .card-art", "card-game #draw-card"]) {
     const [width, height] = await page
@@ -45,7 +45,7 @@ test("free-play random backs follow each card and persist until a new deck", asy
   await settings(page)
     .getByRole("combobox", { name: "Card back", exact: true })
     .selectOption("wildlife");
-  await settings(page).getByText("Card appearance", { exact: true }).click();
+  await settings(page).getByRole("button", { name: "Card appearance", exact: true }).click();
   const before = await assignments(page);
   expect(Object.keys(before)).toHaveLength(52);
   expect(new Set(Object.values(before)).size).toBeGreaterThan(1);
@@ -74,7 +74,7 @@ test("free-play random backs follow each card and persist until a new deck", asy
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   expect(await assignments(page)).toEqual(before);
-  await settings(page).getByText("Card appearance", { exact: true }).click();
+  await settings(page).getByRole("button", { name: "Card appearance", exact: true }).click();
   await settings(page)
     .getByRole("combobox", { name: "Card back", exact: true })
     .selectOption("kenney");
@@ -82,7 +82,7 @@ test("free-play random backs follow each card and persist until a new deck", asy
     .getByRole("combobox", { name: "Card back", exact: true })
     .selectOption("wildlife");
   expect(await assignments(page)).toEqual(before);
-  await settings(page).getByText("Card appearance", { exact: true }).click();
+  await settings(page).getByRole("button", { name: "Card appearance", exact: true }).click();
   await page.getByRole("button", { name: "New deck", exact: true }).click();
   expect(await assignments(page)).not.toEqual(before);
 });
@@ -92,8 +92,9 @@ test("Shithead keeps each hidden card's back across refreshes and mode switches"
   await settings(page)
     .getByRole("combobox", { name: "Card back", exact: true })
     .selectOption("wildlife");
-  await settings(page).getByText("Card appearance", { exact: true }).click();
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await settings(page).getByRole("button", { name: "Card appearance", exact: true }).click();
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   const game = page.locator("shithead-game");
   const before = await assignments(page, "shithead-game");
   const state = await game.evaluate((node) => (node as unknown as { game: ShitheadState }).game);
@@ -114,8 +115,9 @@ test("Shithead keeps each hidden card's back across refreshes and mode switches"
       .locator(".opponent-hand .back")
       .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).backgroundImage)),
   ).toEqual(backs);
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("free-play");
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Free play", exact: true }).click();
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   expect(await assignments(page, "shithead-game")).toEqual(before);
   await game.getByRole("button", { name: "New game", exact: true }).click();
   await game.getByRole("button", { name: "Deal new game", exact: true }).click();
@@ -131,8 +133,9 @@ test("computer draw animations keep the individual backs of all incoming hidden 
   await settings(page)
     .getByRole("combobox", { name: "Card back", exact: true })
     .selectOption("wildlife");
-  await settings(page).getByText("Card appearance", { exact: true }).click();
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await settings(page).getByRole("button", { name: "Card appearance", exact: true }).click();
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   const game = page.locator("shithead-game");
   const backs = await assignments(page, "shithead-game");
   const original = await game.evaluate((node) => (node as unknown as { game: ShitheadState }).game);

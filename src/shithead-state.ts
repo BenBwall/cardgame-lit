@@ -68,6 +68,7 @@ const strength = (card: Card): number =>
 export function newShithead(
   random = Math.random,
   rules: ShitheadRules = DEFAULT_SHITHEAD_RULES,
+  prepareComputer = true,
 ): ShitheadState {
   const stock = shuffle(createDeck(), random);
   const players = [0, 1].map(() => ({
@@ -94,7 +95,8 @@ export function newShithead(
   const opponent = [...players[1].hand, ...players[1].faceUp].sort(
     (a, b) => strength(a) - strength(b),
   );
-  players[1] = { ...players[1], hand: opponent.slice(0, 3), faceUp: opponent.slice(3) };
+  if (prepareComputer)
+    players[1] = { ...players[1], hand: opponent.slice(0, 3), faceUp: opponent.slice(3) };
   return {
     rules: { ...rules },
     players: [

@@ -57,7 +57,8 @@ const drag = async (page: Page, source: Locator, target: Locator) => {
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 1500 });
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
 });
 
 test("hand shares fan/grid layout, sorting, keyboard and mouse reordering with free play", async ({

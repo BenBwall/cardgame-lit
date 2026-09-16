@@ -30,6 +30,8 @@ import { CardMotion } from "./card-motion.js";
 import { fanLayout } from "./hand-layout.js";
 import { HandSizeMotion } from "./hand-size-motion.js";
 import "./shithead-game.js";
+import "./multiplayer/online-lobby.js";
+import { onlineGames } from "./multiplayer/shithead-ui.js";
 import {
   gameStorageKey,
   readSavedGame,
@@ -50,10 +52,12 @@ const flipOptions = [
 export class CardGame extends LitElement {
   static properties = {
     storageKey: { attribute: "storage-key" },
+    multiplayerUrl: { attribute: "multiplayer-url" },
     artwork: { state: true },
     artworkError: { state: true },
     saveFailed: { state: true },
     mode: { state: true },
+    shitheadMode: { state: true },
     game: { state: true },
     history: { state: true },
     sortOrder: { state: true },
@@ -66,12 +70,14 @@ export class CardGame extends LitElement {
 
   private game: GameState | undefined;
   storageKey = "";
+  multiplayerUrl = "";
   private artwork: CardArtwork = defaultArtwork();
   private artworkError = "";
   private backAssignments: BackAssignments = {};
   private restored = false;
   private saveFailed = false;
-  private mode: "free-play" | "shithead" = "free-play";
+  private mode: "free-play" | "shithead" | "online" = "free-play";
+  private shitheadMode: "shithead" | "online" = "shithead";
   private history: { game: GameState; sortOrder: SortOrder }[] = [];
   private sortOrder: SortOrder = "draw-order";
   private message = "Draw a card to begin.";
@@ -105,7 +111,10 @@ export class CardGame extends LitElement {
           : newBackAssignments();
       if (saved) {
         if (isFreeGame(saved.game)) this.game = saved.game;
-        if (saved.mode === "shithead" || saved.mode === "free-play") this.mode = saved.mode;
+        if (saved.shitheadMode === "online") this.shitheadMode = "online";
+        if (saved.mode === "shithead" || saved.mode === "free-play" || saved.mode === "online")
+          this.mode = saved.mode;
+        if (this.mode !== "free-play") this.shitheadMode = this.mode;
         if (isSortOrder(saved.sortOrder)) this.sortOrder = saved.sortOrder;
         if (saved.handLayout === "fan" || saved.handLayout === "grid")
           this.handLayout = saved.handLayout;
@@ -160,6 +169,7 @@ export class CardGame extends LitElement {
     this.saveFailed = !writeSavedGame(this.storageKey, {
       game: this.game,
       mode: this.mode,
+      shitheadMode: this.shitheadMode,
       sortOrder: this.sortOrder,
       handLayout: this.handLayout,
       flipDirection: this.flipDirection,
@@ -360,28 +370,133 @@ export class CardGame extends LitElement {
     });
   }
 
+  private setMode(mode: "free-play" | "shithead" | "online"): void {
+    if (this.mode === mode) return;
+    this.handDrag.dispose();
+    this.cardMotion.finish();
+    this.handSizeMotion.disconnect();
+    this.mode = mode;
+    if (mode !== "free-play") this.shitheadMode = mode;
+    void this.updateComplete.then(() => {
+      if (this.isConnected && this.mode === "free-play") this.handSizeMotion.connect();
+    });
+  }
+
+  private tabKey(
+    event: KeyboardEvent,
+    modes: readonly ("free-play" | "shithead" | "online")[],
+  ): void {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const buttons = Array.from(
+      (event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+    );
+    const current = buttons.indexOf(event.target as HTMLButtonElement);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? modes.length - 1
+          : (current + (event.key === "ArrowRight" ? 1 : -1) + modes.length) % modes.length;
+    this.setMode(modes[next]);
+    buttons[next].focus();
+  }
+
   protected render() {
     if (!this.game) return nothing;
-    return html`<div class="game" aria-label="Single-player card table">
-      <label class="mode-select"
-        >Game
-        <select
+    return html`<div class="game" aria-label="Card table">
+        <div
+          class="game-tabs"
+          role="tablist"
           aria-label="Game"
-          .value=${this.mode}
-          @change=${(event: Event) => {
-            this.handDrag.dispose();
-            this.cardMotion.finish();
-            this.handSizeMotion.disconnect();
-            this.mode = (event.target as HTMLSelectElement).value as "free-play" | "shithead";
-            void this.updateComplete.then(() => {
-              if (this.isConnected && this.mode === "free-play") this.handSizeMotion.connect();
-            });
-          }}
+          @keydown=${(event: KeyboardEvent) => this.tabKey(event, ["free-play", this.shitheadMode])}
         >
-          <option value="free-play">Free play</option>
-          <option value="shithead">Shithead · vs computer</option>
-        </select>
-      </label>
+          <button
+            type="button"
+            role="tab"
+            id="free-play-tab"
+            aria-controls="free-play-panel"
+            aria-selected=${this.mode === "free-play"}
+            tabindex=${this.mode === "free-play" ? 0 : -1}
+            @click=${() => this.setMode("free-play")}
+          >
+            Free play
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="shithead-tab"
+            aria-controls="shithead-panel"
+            aria-selected=${this.mode !== "free-play"}
+            tabindex=${this.mode !== "free-play" ? 0 : -1}
+            @click=${() => this.setMode(this.shitheadMode)}
+          >
+            Shithead
+          </button>
+        </div>
+
+        ${this.saveFailed ? html`<p>Browser storage is unavailable. This game cannot be saved.</p>` : nothing}
+        <div
+          id="free-play-panel"
+          role="tabpanel"
+          aria-labelledby="free-play-tab"
+          ?hidden=${this.mode !== "free-play"}
+        >
+          ${this.mode === "free-play" ? this.renderFreePlay() : nothing}
+        </div>
+        <div
+          id="shithead-panel"
+          role="tabpanel"
+          aria-labelledby="shithead-tab"
+          ?hidden=${this.mode === "free-play"}
+        >
+          <div
+            class="game-tabs subtabs"
+            role="tablist"
+            aria-label="Shithead mode"
+            @keydown=${(event: KeyboardEvent) => this.tabKey(event, ["shithead", "online"])}
+          >
+            <button
+              type="button"
+              role="tab"
+              id="single-player-tab"
+              aria-controls="single-player-panel"
+              aria-selected=${this.shitheadMode === "shithead"}
+              tabindex=${this.shitheadMode === "shithead" ? 0 : -1}
+              @click=${() => this.setMode("shithead")}
+            >
+              Single player
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="multiplayer-tab"
+              aria-controls="multiplayer-panel"
+              aria-selected=${this.shitheadMode === "online"}
+              tabindex=${this.shitheadMode === "online" ? 0 : -1}
+              @click=${() => this.setMode("online")}
+            >
+              Multiplayer
+            </button>
+          </div>
+          <div
+            id="single-player-panel"
+            role="tabpanel"
+            aria-labelledby="single-player-tab"
+            ?hidden=${this.mode !== "shithead"}
+          >
+            ${this.mode === "shithead" ? html`<shithead-game .storageKey=${`${this.storageKey}:shithead`} .randomBacks=${this.artwork.back === "wildlife"}></shithead-game>` : nothing}
+          </div>
+          <div
+            id="multiplayer-panel"
+            role="tabpanel"
+            aria-labelledby="multiplayer-tab"
+            ?hidden=${this.mode !== "online"}
+          >
+            <online-lobby .serverUrl=${this.multiplayerUrl} .games=${onlineGames}></online-lobby>
+          </div>
+        </div>
+      </div>
       <card-appearance
         .value=${this.artwork}
         .saveError=${this.artworkError}
@@ -398,10 +513,7 @@ export class CardGame extends LitElement {
           this.artwork = event.detail;
           applyArtwork(this, this.artwork);
         }}
-      ></card-appearance>
-      ${this.saveFailed ? html`<p>Browser storage is unavailable. This game cannot be saved.</p>` : nothing}
-      ${this.mode === "shithead" ? html`<shithead-game .storageKey=${`${this.storageKey}:shithead`} .randomBacks=${this.artwork.back === "wildlife"}></shithead-game>` : this.renderFreePlay()}
-    </div>`;
+      ></card-appearance>`;
   }
 
   private renderFreePlay() {

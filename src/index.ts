@@ -2,6 +2,9 @@ export { CardGame } from "./card-game.js";
 export { CardAppearance } from "./card-appearance.js";
 export { type CardArtwork, defaultArtwork, applyArtwork } from "./card-art.js";
 export { ShitheadGame } from "./shithead-game.js";
+export { OnlineLobby, type LobbyGame } from "./multiplayer/online-lobby.js";
+export { OnlineClient } from "./multiplayer/client.js";
+export type { Admission, RoomView, Command, ServerMessage } from "./multiplayer/protocol.js";
 export {
   type ShitheadState,
   type ShitheadRules,

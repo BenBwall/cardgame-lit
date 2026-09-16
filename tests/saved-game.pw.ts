@@ -48,7 +48,8 @@ test.beforeEach(async ({ page }) => {
 test("matching ranks expose Select all and subsets remain selected across refresh", async ({
   page,
 }) => {
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   const initial = fullState();
   await setState(page, initial);
   await expect(
@@ -94,7 +95,8 @@ test("matching ranks expose Select all and subsets remain selected across refres
 test("matching face-up cards play together and burn a fourth matching pile card", async ({
   page,
 }) => {
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   const initial = fullState();
   const player = initial.players[0];
   await setState(page, {
@@ -117,7 +119,8 @@ test("matching face-up cards play together and burn a fourth matching pile card"
 test("mode, active deal, pending rules and every hand setting survive refresh and switching modes", async ({
   page,
 }) => {
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   const initial = fullState();
   await setState(page, initial);
   await game(page).getByRole("button", { name: "Grid layout", exact: true }).click();
@@ -136,7 +139,10 @@ test("mode, active deal, pending rules and every hand setting survive refresh an
     .getByRole("checkbox", { name: "Reveal the card underneath", exact: true })
     .check();
   await page.reload();
-  await expect(page.getByRole("combobox", { name: "Game", exact: true })).toHaveValue("shithead");
+  await expect(page.getByRole("tab", { name: "Shithead", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(game(page).getByRole("tab", { name: "Options", exact: true })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -166,13 +172,15 @@ test("mode, active deal, pending rules and every hand setting survive refresh an
       .locator(".hand button")
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-card-id"))),
   ).toEqual(order);
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("free-play");
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Free play", exact: true }).click();
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   expect(await state(page)).toEqual(initial);
 });
 
 test("a pending computer turn resumes once after refresh", async ({ page }) => {
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   await setState(page, { ...fullState(), turn: 1 });
   await page.reload();
   await expect.poll(() => state(page).then((value) => value.turn)).toBe(1);
@@ -189,7 +197,8 @@ test("refresh during a flight restores its committed move without replaying it",
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
   const initial = fullState();
   await setState(page, {
     ...initial,

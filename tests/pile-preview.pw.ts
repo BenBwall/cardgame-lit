@@ -5,7 +5,8 @@ import { DEFAULT_SHITHEAD_RULES, type ShitheadState } from "../src/shithead-stat
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
-  await page.getByRole("combobox", { name: "Game", exact: true }).selectOption("shithead");
+  await page.getByRole("tab", { name: "Shithead", exact: true }).click();
+  await page.getByRole("tab", { name: "Single player", exact: true }).click();
 });
 
 test("pile previews show all public cards in order without playing or revealing hidden cards", async ({

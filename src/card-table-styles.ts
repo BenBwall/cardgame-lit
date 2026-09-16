@@ -1,12 +1,30 @@
 import { css } from "lit";
 
 export const cardTableStyles = css`
-  .mode-select {
+  .game-tabs {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 0.6rem;
+    gap: 0.25rem;
     margin-bottom: 1rem;
+    border-bottom: 1px solid var(--color-border, #d0d8d0);
+  }
+  .game-tabs [role="tab"] {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-muted, #506050);
+    margin-bottom: -1px;
+  }
+  .game-tabs [role="tab"][aria-selected="true"] {
+    border-bottom-color: currentColor;
+    color: var(--color-text, #202820);
+    font-weight: 600;
+  }
+  .subtabs {
+    font-size: 0.875rem;
+    margin-top: 1rem;
   }
   :host {
     display: block;

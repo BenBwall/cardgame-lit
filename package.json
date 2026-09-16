@@ -17,7 +17,9 @@
   },
   "scripts": {
     "build": "tsc && bun scripts/build-demo.ts",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && tsc --project server/tsconfig.json",
+    "server": "bun server/main.ts",
+    "server:dev": "bun --env-file=server/development.env server/main.ts",
     "test": "bun test tests",
     "test:browser": "bun run build && playwright test"
   },
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/bun": "^1.4.2",
     "lit": "^3.3.3",
     "typescript": "^6.0.3"
   },

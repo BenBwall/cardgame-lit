@@ -12,6 +12,11 @@ import {
   cardIdFromFilename,
   isArtwork,
   faceContents,
+  basicBackBackground,
+  basicBackInk,
+  basicBackStripeColor,
+  basicBackPatterns,
+  defaultBasicBackColor,
 } from "./card-art.js";
 import { createDeck, cardId, cardName } from "./cards.js";
 
@@ -22,12 +27,14 @@ export class CardAppearance extends LitElement {
     uploading: { state: true },
     message: { state: true },
     targetCard: { state: true },
+    expanded: { state: true },
   };
   value: CardArtwork = defaultArtwork();
   saveError = "";
   private uploading = false;
   private message = "";
   private targetCard = "A-Spades";
+  private expanded = false;
   private choose(value: CardArtwork): void {
     this.message = "";
     this.dispatchEvent(
@@ -76,160 +83,285 @@ export class CardAppearance extends LitElement {
     const example = createDeck().find((c) => cardId(c) === this.targetCard)!;
     const front = faceImage(this.value, example),
       back = backImage(this.value);
-    return html`<details class="appearance">
-      <summary>Card appearance</summary>
-      <div class="appearance-content">
-        <p>
-          Choose faces and backs independently. Applies to both games and saves in this browser.
-        </p>
-        <fieldset ?disabled=${this.uploading}>
-          <legend>Built-in styles</legend>
-          <label
-            >Card faces<select
-              aria-label="Card faces"
-              .value=${live(this.value.faces)}
-              @change=${(e: Event) => this.choose({ ...this.value, faces: (e.target as HTMLSelectElement).value })}
-            >
-              ${faceChoices.map((c) => html`<option value=${c.id} ?selected=${this.value.faces === c.id}>${c.label}</option>`)}
-            </select></label
+    return html`<button
+        class="appearance-tab"
+        type="button"
+        popovertarget="appearance-panel"
+        aria-controls="appearance-panel"
+        aria-expanded=${this.expanded}
+      >
+        Card appearance
+      </button>
+      <section
+        id="appearance-panel"
+        class="appearance"
+        popover="auto"
+        aria-label="Card appearance settings"
+        @beforetoggle=${(event: Event) => {
+          const panel = event.target as HTMLElement;
+          if (
+            panel.matches(":popover-open") &&
+            panel.contains(this.shadowRoot?.activeElement ?? null)
+          ) {
+            // Restore focus across the shadow boundary when a focused panel closes.
+            queueMicrotask(() =>
+              this.renderRoot
+                .querySelector<HTMLButtonElement>(".appearance-tab")
+                ?.focus({ preventScroll: true }),
+            );
+          }
+        }}
+        @toggle=${(event: Event) => {
+          this.expanded = (event.target as HTMLElement).matches(":popover-open");
+        }}
+      >
+        <header class="appearance-heading">
+          <h2>Card appearance</h2>
+          <button
+            type="button"
+            popovertarget="appearance-panel"
+            popovertargetaction="hide"
+            autofocus
+            aria-label="Close card appearance"
           >
-          <label
-            >Card back<select
-              aria-label="Card back"
-              .value=${live(this.value.back)}
-              @change=${(e: Event) => this.choose({ ...this.value, back: (e.target as HTMLSelectElement).value })}
-            >
-              ${backChoices.map((c) => html`<option value=${c.id} ?selected=${this.value.back === c.id} ?disabled=${c.id === "custom" && !this.value.customBack}>${c.label}</option>`)}
-            </select></label
-          >
-          <div class="art-samples" aria-label="Artwork preview">
-            <div
-              class="art-sample face"
-              data-suit=${example.suit}
-              role="img"
-              aria-label=${`Face preview: ${cardName(example)}`}
-            >
-              ${front ? html`<img class=${this.value.faces === "kenney" ? "kenney-art" : ""} src=${front} alt="" />` : faceContents(example)}
-            </div>
-            <div class="art-sample original-back" role="img" aria-label="Back preview">
-              ${back ? html`<img class=${this.value.back === "kenney" ? "kenney-art" : ""} src=${back} alt="" />` : html`<span>✦</span>`}
-            </div>
-          </div>
-          ${this.value.back === "wildlife" ? html`<p>Each card gets a random GreyWyvern back for this game. Its back stays the same through moves and refreshes; a new deal assigns new backs.</p>` : nothing}
-        </fieldset>
-        <fieldset ?disabled=${this.uploading}>
-          <legend>Your images</legend>
+            ✕
+          </button>
+        </header>
+        <div class="appearance-content">
           <p>
-            PNG, JPEG, or WebP, up to 5 MB each. Images fit the card without cropping and stay on
-            this device.
+            Choose faces and backs independently. Applies to both games and saves in this browser.
           </p>
-          <label
-            >Upload a back<input
-              aria-label="Upload a back"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              @change=${(e: Event) => {
-                void this.upload(e, "back");
-              }}
-          /></label>
-          <label
-            >Card to customize<select
-              aria-label="Card to customize"
-              .value=${this.targetCard}
-              @change=${(e: Event) => {
-                this.targetCard = (e.target as HTMLSelectElement).value;
-              }}
+          <fieldset ?disabled=${this.uploading}>
+            <legend>Built-in styles</legend>
+            <label
+              >Card faces<select
+                aria-label="Card faces"
+                .value=${live(this.value.faces)}
+                @change=${(e: Event) => this.choose({ ...this.value, faces: (e.target as HTMLSelectElement).value })}
+              >
+                ${faceChoices.map((c) => html`<option value=${c.id} ?selected=${this.value.faces === c.id}>${c.label}</option>`)}
+              </select></label
             >
-              ${createDeck().map((c) => html`<option value=${cardId(c)} ?selected=${this.targetCard === cardId(c)}>${cardName(c)}</option>`)}
-            </select></label
-          >
-          <label
-            >Upload this card’s face<input
-              aria-label="Upload card face"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              @change=${(e: Event) => {
-                void this.upload(e, "face");
-              }}
-          /></label>
-          <label
-            >Import several faces<input
-              aria-label="Import card faces"
-              type="file"
-              multiple
-              accept="image/png,image/jpeg,image/webp"
-              @change=${(e: Event) => {
-                void this.upload(e, "deck");
-              }}
-          /></label>
-          <p>
-            Name files like <code>A-Spades.png</code>, <code>10-Hearts.jpg</code>, or
-            <code>K-Clubs.webp</code>. Cards without custom art use the original face.
+            <label
+              >Card back<select
+                aria-label="Card back"
+                .value=${live(this.value.back)}
+                @change=${(e: Event) => this.choose({ ...this.value, back: (e.target as HTMLSelectElement).value })}
+              >
+                ${backChoices.map((c) => html`<option value=${c.id} ?selected=${this.value.back === c.id} ?disabled=${c.id === "custom" && !this.value.customBack}>${c.label}</option>`)}
+              </select></label
+            >
+            ${
+              this.value.back === "original"
+                ? html` <label
+                      >Basic back color
+                      <input
+                        type="color"
+                        .value=${live(this.value.basicBackColor ?? defaultBasicBackColor)}
+                        @input=${(event: Event) => this.choose({ ...this.value, basicBackColor: (event.target as HTMLInputElement).value })}
+                      />
+                    </label>
+                    <label
+                      >Basic back pattern
+                      <select
+                        .value=${live(this.value.basicBackPattern ?? "diagonal")}
+                        @change=${(event: Event) => this.choose({ ...this.value, basicBackPattern: (event.target as HTMLSelectElement).value as CardArtwork["basicBackPattern"] })}
+                      >
+                        ${basicBackPatterns.map((pattern) => html`<option value=${pattern} ?selected=${(this.value.basicBackPattern ?? "diagonal") === pattern}>${pattern === "plain" ? "Plain (no stripes)" : `${pattern[0].toUpperCase()}${pattern.slice(1)} stripes`}</option>`)}
+                      </select>
+                    </label>
+                    ${
+                      this.value.basicBackPattern !== "plain"
+                        ? html`
+                            <label
+                              >Basic back secondary color
+                              <input
+                                type="color"
+                                aria-describedby="secondary-color-help"
+                                .value=${live(basicBackStripeColor(this.value))}
+                                @input=${(event: Event) => this.choose({ ...this.value, basicBackSecondaryColor: (event.target as HTMLInputElement).value })}
+                              />
+                            </label>
+                            <p id="secondary-color-help">
+                              ${this.value.basicBackSecondaryColor ? "Custom stripe color." : "Automatic: follows the main color with a lighter shade."}
+                            </p>
+                            <button
+                              type="button"
+                              ?disabled=${!this.value.basicBackSecondaryColor}
+                              @click=${() => this.choose({ ...this.value, basicBackSecondaryColor: undefined })}
+                            >
+                              Use automatic stripe color
+                            </button>
+                          `
+                        : nothing
+                    }`
+                : nothing
+            }
+            <div class="art-samples" aria-label="Artwork preview">
+              <div
+                class="art-sample face"
+                data-suit=${example.suit}
+                role="img"
+                aria-label=${`Face preview: ${cardName(example)}`}
+              >
+                ${front ? html`<img class=${this.value.faces === "kenney" ? "kenney-art" : ""} src=${front} alt="" />` : faceContents(example)}
+              </div>
+              <div
+                class="art-sample basic-back"
+                role="img"
+                aria-label="Back preview"
+                style=${back ? "" : `background-image:${basicBackBackground(this.value)};color:${basicBackInk(this.value)}`}
+              >
+                ${back ? html`<img class=${this.value.back === "kenney" ? "kenney-art" : ""} src=${back} alt="" />` : html`<span>✦</span>`}
+              </div>
+            </div>
+            ${this.value.back === "wildlife" ? html`<p>Each card gets a random GreyWyvern back for this game. Its back stays the same through moves and refreshes; a new deal assigns new backs.</p>` : nothing}
+          </fieldset>
+          <fieldset ?disabled=${this.uploading}>
+            <legend>Your images</legend>
+            <p>
+              PNG, JPEG, or WebP, up to 5 MB each. Images fit the card without cropping and stay on
+              this device.
+            </p>
+            <label
+              >Upload a back<input
+                aria-label="Upload a back"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                @change=${(e: Event) => {
+                  void this.upload(e, "back");
+                }}
+            /></label>
+            <label
+              >Card to customize<select
+                aria-label="Card to customize"
+                .value=${this.targetCard}
+                @change=${(e: Event) => {
+                  this.targetCard = (e.target as HTMLSelectElement).value;
+                }}
+              >
+                ${createDeck().map((c) => html`<option value=${cardId(c)} ?selected=${this.targetCard === cardId(c)}>${cardName(c)}</option>`)}
+              </select></label
+            >
+            <label
+              >Upload this card’s face<input
+                aria-label="Upload card face"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                @change=${(e: Event) => {
+                  void this.upload(e, "face");
+                }}
+            /></label>
+            <label
+              >Import several faces<input
+                aria-label="Import card faces"
+                type="file"
+                multiple
+                accept="image/png,image/jpeg,image/webp"
+                @change=${(e: Event) => {
+                  void this.upload(e, "deck");
+                }}
+            /></label>
+            <p>
+              Name files like <code>A-Spades.png</code>, <code>10-Hearts.jpg</code>, or
+              <code>K-Clubs.webp</code>. Cards without custom art use the basic face.
+            </p>
+            <p>${Object.keys(this.value.customFaces).length} of 52 custom faces</p>
+            <div class="clear-actions">
+              <button
+                type="button"
+                ?disabled=${!this.value.customFaces[this.targetCard]}
+                @click=${() => {
+                  const customFaces = { ...this.value.customFaces };
+                  delete customFaces[this.targetCard];
+                  this.choose({ ...this.value, customFaces });
+                }}
+              >
+                Remove this face
+              </button>
+              <button
+                type="button"
+                ?disabled=${!Object.keys(this.value.customFaces).length}
+                @click=${() => this.choose({ ...this.value, faces: "original", customFaces: {} })}
+              >
+                Clear custom faces
+              </button>
+              <button
+                type="button"
+                ?disabled=${!this.value.customBack}
+                @click=${() => this.choose({ ...this.value, back: "original", customBack: "" })}
+              >
+                Remove custom back
+              </button>
+            </div>
+          </fieldset>
+          ${this.uploading ? html`<p role="status">Importing images…</p>` : nothing}
+          ${this.message || this.saveError ? html`<p role="alert">${this.message || this.saveError}</p>` : nothing}
+          <p class="credits">
+            Free CC0 artwork:
+            <a
+              href="https://kenney.nl/assets/playing-cards-pack"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Kenney</a
+            >
+            and
+            <a
+              href="https://opengameart.org/content/greywyvern-playing-card-set"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Brian Huisman / GreyWyvern</a
+            >. Basic (HTML+CSS) styles remain available.
           </p>
-          <p>${Object.keys(this.value.customFaces).length} of 52 custom faces</p>
-          <div class="clear-actions">
-            <button
-              type="button"
-              ?disabled=${!this.value.customFaces[this.targetCard]}
-              @click=${() => {
-                const customFaces = { ...this.value.customFaces };
-                delete customFaces[this.targetCard];
-                this.choose({ ...this.value, customFaces });
-              }}
-            >
-              Remove this face
-            </button>
-            <button
-              type="button"
-              ?disabled=${!Object.keys(this.value.customFaces).length}
-              @click=${() => this.choose({ ...this.value, faces: "original", customFaces: {} })}
-            >
-              Clear custom faces
-            </button>
-            <button
-              type="button"
-              ?disabled=${!this.value.customBack}
-              @click=${() => this.choose({ ...this.value, back: "original", customBack: "" })}
-            >
-              Remove custom back
-            </button>
-          </div>
-        </fieldset>
-        ${this.uploading ? html`<p role="status">Importing images…</p>` : nothing}
-        ${this.message || this.saveError ? html`<p role="alert">${this.message || this.saveError}</p>` : nothing}
-        <p class="credits">
-          Free CC0 artwork:
-          <a
-            href="https://kenney.nl/assets/playing-cards-pack"
-            target="_blank"
-            rel="noopener noreferrer"
-            >Kenney</a
-          >
-          and
-          <a
-            href="https://opengameart.org/content/greywyvern-playing-card-set"
-            target="_blank"
-            rel="noopener noreferrer"
-            >Brian Huisman / GreyWyvern</a
-          >. Original styles remain available.
-        </p>
-      </div>
-    </details>`;
+        </div>
+      </section>`;
   }
   static styles = [
     cardTableStyles,
     css`
       :host {
         display: block;
-        margin-bottom: 1rem;
+      }
+      .appearance-tab {
+        position: fixed;
+        inset: 50% auto auto 0;
+        transform: translateY(-50%);
+        z-index: 20;
+        writing-mode: vertical-rl;
+        padding: 1rem 0.65rem;
+        min-width: 2.75rem;
+        border-radius: 0 0.6rem 0.6rem 0;
+        background: var(--color-surface, #f7f9f5);
+        box-shadow: 0 2px 8px #0002;
+      }
+      .appearance-tab[aria-expanded="true"] {
+        background: var(--color-background, #fff);
       }
       .appearance {
-        border: 1px solid var(--color-border, #d0d8d0);
-        border-radius: 0.6rem;
-        padding: 0.75rem;
-      }
-      summary {
+        position: fixed;
+        inset: 50% auto auto 3.25rem;
+        transform: translateY(-50%);
+        margin: 0;
+        width: min(25rem, calc(100vw - 4rem));
+        max-height: calc(100dvh - 2rem);
+        overflow: auto;
+        overscroll-behavior: contain;
         color: var(--color-text, #202820);
+        background: var(--color-surface, #f7f9f5);
+        border: 1px solid var(--color-border, #d0d8d0);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        box-shadow: 0 8px 32px #0003;
+      }
+      .appearance-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+      h2 {
+        margin: 0;
+        font-size: 1rem;
       }
       .appearance-content {
         display: grid;
@@ -238,6 +370,7 @@ export class CardAppearance extends LitElement {
       }
       fieldset {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: 0.8rem;
         min-width: 0;
         padding: 1rem;
@@ -255,7 +388,9 @@ export class CardAppearance extends LitElement {
         max-width: 100%;
         min-width: 0;
       }
+      label,
       select {
+        min-width: 0;
         max-width: 100%;
       }
       .art-samples,
@@ -283,6 +418,12 @@ export class CardAppearance extends LitElement {
         height: 100%;
         object-fit: fill;
       }
+      .art-sample .face-labels {
+        position: absolute;
+        inset: 0.375rem;
+        width: auto;
+        height: auto;
+      }
       .art-sample img.kenney-art {
         position: absolute;
         left: 50%;
@@ -292,15 +433,18 @@ export class CardAppearance extends LitElement {
         transform: translate(-50%, -50%);
         image-rendering: pixelated;
       }
-      .original-back {
-        background: repeating-linear-gradient(
-          45deg,
-          #355342 0px,
-          #355342 5px,
-          #42634e 5px,
-          #42634e 7px
-        );
-        color: #fffdf8;
+      input[type="color"] {
+        width: 3rem;
+        height: 2.75rem;
+        padding: 0.2rem;
+        border: 1px solid var(--color-border-strong, #859585);
+        border-radius: 0.5rem;
+        background: var(--color-background, #fff);
+        cursor: pointer;
+      }
+      .basic-back:not(:has(img)) {
+        border: 3px double #d8e4d8;
+        font-size: 1.75rem;
       }
       a {
         color: inherit;
