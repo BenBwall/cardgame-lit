@@ -42,6 +42,7 @@ test("built-in faces and backs render offline in both games and survive refresh"
     [...Object.values(faceAssets).flatMap(Object.values), ...Object.values(backAssets)],
   );
   expect(results.every(Boolean)).toBe(true);
+  await expect(page.locator("card-game #draw-card .back-mark")).toHaveCSS("visibility", "visible");
   await settings(page)
     .getByRole("combobox", { name: "Card faces", exact: true })
     .selectOption("kenney");
@@ -49,6 +50,7 @@ test("built-in faces and backs render offline in both games and survive refresh"
     .getByRole("combobox", { name: "Card back", exact: true })
     .selectOption("wildlife-3");
   await settings(page).getByText("Card appearance", { exact: true }).click();
+  await expect(page.locator("card-game #draw-card .back-mark")).toHaveCSS("visibility", "hidden");
   await page.getByRole("button", { name: "Draw a card", exact: true }).click();
   expect(await background(page, "card-game .hand .card-art")).toContain("data:image/png;base64");
   expect(await background(page, "card-game #draw-card")).toContain(backAssets["wildlife-3"]);
@@ -75,6 +77,13 @@ test("built-in faces and backs render offline in both games and survive refresh"
   expect(await background(page, "shithead-game .opponent-hand .back")).toContain(
     backAssets["wildlife-3"],
   );
+  expect(
+    await page
+      .locator("shithead-game .back-mark")
+      .evaluateAll((nodes) =>
+        nodes.every((node) => getComputedStyle(node).visibility === "hidden"),
+      ),
+  ).toBe(true);
   await settings(page).getByText("Card appearance", { exact: true }).click();
   await settings(page)
     .getByRole("combobox", { name: "Card faces", exact: true })

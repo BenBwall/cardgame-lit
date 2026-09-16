@@ -303,7 +303,7 @@ export class CardGame extends LitElement {
     return html`<span class="flight-flipper" aria-hidden="true">
       <span class="card face flight-front" data-suit=${card.suit}> ${faceContents(card)} </span>
       <span class="card back flight-back" style=${cardBackStyle(card, this.backAssignments)}
-        >✦</span
+        ><span class="back-mark">✦</span></span
       >
     </span>`;
   }
@@ -460,7 +460,11 @@ export class CardGame extends LitElement {
             @click=${this.draw}
             ?disabled=${!deck.length}
           >
-            <span aria-hidden="true">${deck.length ? "✦" : "Empty"}</span>
+            ${
+              deck.length
+                ? html`<span class="back-mark" aria-hidden="true">✦</span>`
+                : html`<span aria-hidden="true">Empty</span>`
+            }
           </button>
           <span>Deck <strong>${deck.length}</strong></span>
         </div>

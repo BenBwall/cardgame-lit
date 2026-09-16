@@ -6,7 +6,8 @@ const DRAG_DISTANCE = 6;
 type Drag = {
   pointerId: number;
   source: HTMLButtonElement;
-  hand: HTMLElement;
+  hand?: HTMLElement;
+  root: ParentNode;
   startX: number;
   startY: number;
   offsetX: number;
@@ -18,10 +19,12 @@ type Drag = {
   lastFrame?: number;
   preview?: HTMLElement;
   marker?: HTMLElement;
+  zone?: HTMLElement;
   destination?: number;
+  dropZone?: string;
 };
 
-/** Pointer capture keeps mouse, pen, and touch drags local to this hand. */
+/** Pointer capture keeps mouse, pen, and touch card drags within their component. */
 export class HandDrag {
   private drag?: Drag;
   private suppressClick = false;
@@ -31,15 +34,26 @@ export class HandDrag {
       id: string,
       destination: number | undefined,
       preview: HTMLElement,
+      dropZone: string | undefined,
     ) => void,
+    private readonly acceptsDropZone: (id: string, dropZone: string) => boolean = () => false,
   ) {}
+
+  get active(): boolean {
+    return !!this.drag;
+  }
 
   pointerDown = (event: PointerEvent): void => {
     if (this.drag || !event.isPrimary || event.button !== 0) return;
     this.suppressClick = false;
-    const source = (event.target as Element).closest<HTMLButtonElement>("button[data-card-id]");
-    const hand = event.currentTarget as HTMLElement;
-    if (!source || !hand.contains(source)) return;
+    const source = (event.target as Element).closest<HTMLButtonElement>(
+      "button[data-card-id], button[data-drag-id]",
+    );
+    const current = event.currentTarget as HTMLElement;
+    if (!source || !current.contains(source)) return;
+    const hand =
+      source.closest<HTMLElement>("[data-drag-hand]") ??
+      (current.matches(".hand") ? current : undefined);
     const pose = cardGeometry(source);
     const dx = event.clientX - pose.x - pose.ox;
     const dy = event.clientY - pose.y - pose.oy;
@@ -47,10 +61,11 @@ export class HandDrag {
     const offsetY = pose.matrix.c * dx + pose.matrix.d * dy + pose.oy;
     const x = event.clientX - offsetX;
     const y = event.clientY - offsetY;
-    this.drag = {
+    const drag: Drag = {
       pointerId: event.pointerId,
       source,
       hand,
+      root: source.getRootNode() as ParentNode,
       startX: event.clientX,
       startY: event.clientY,
       offsetX,
@@ -64,7 +79,8 @@ export class HandDrag {
         (offsetY / pose.height - 0.5) * 2,
       ),
     };
-    this.drag.motion.angle = pose.angle;
+    drag.motion.angle = pose.angle;
+    this.drag = drag;
     source.setPointerCapture(event.pointerId);
     window.addEventListener("blur", this.cancel);
   };
@@ -87,7 +103,7 @@ export class HandDrag {
       drag.source.getRootNode().appendChild(preview);
       drag.preview = preview;
       drag.source.setAttribute("data-drag-source", "");
-      drag.hand.setAttribute("data-dragging", "");
+      drag.hand?.setAttribute("data-dragging", "");
     }
     event.preventDefault();
     drag.targetX = event.clientX - drag.offsetX;
@@ -116,27 +132,63 @@ export class HandDrag {
     const drag = this.drag;
     if (!drag) return;
     drag.marker?.removeAttribute("data-drop-side");
+    drag.zone?.removeAttribute("data-drop-active");
     drag.marker = undefined;
+    drag.zone = undefined;
     drag.destination = undefined;
-    const bounds = drag.hand.getBoundingClientRect();
-    if (x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom) return;
-    const cards = [...drag.hand.querySelectorAll<HTMLButtonElement>("button[data-card-id]")].filter(
-      (card) => card !== drag.source,
+    drag.dropZone = undefined;
+    if (drag.hand) {
+      const bounds = drag.hand.getBoundingClientRect();
+      if (x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom) {
+        const cards = [
+          ...drag.hand.querySelectorAll<HTMLButtonElement>("button[data-card-id]"),
+        ].filter((card) => card !== drag.source);
+        let nearest:
+          | { card: HTMLButtonElement; index: number; distance: number; after: boolean }
+          | undefined;
+        cards.forEach((card, index) => {
+          const rect = card.getBoundingClientRect();
+          const center = rect.left + rect.width / 2;
+          const distance = Math.hypot(x - center, y - (rect.top + rect.height / 2));
+          if (!nearest || distance < nearest.distance)
+            nearest = { card, index, distance, after: x >= center };
+        });
+        if (!nearest) return;
+        drag.marker = nearest.card;
+        drag.destination = nearest.index + Number(nearest.after);
+        nearest.card.setAttribute("data-drop-side", nearest.after ? "after" : "before");
+        return;
+      }
+    }
+    const id = drag.source.dataset.dragId ?? drag.source.dataset.cardId;
+    if (!id) return;
+    const zones = [...drag.root.querySelectorAll<HTMLElement>("[data-drop-zone]")].flatMap(
+      (zone) => {
+        const name = zone.dataset.dropZone;
+        if (!name || zone === drag.source || zone.contains(drag.source)) return [];
+        const rect = zone.getBoundingClientRect();
+        return x >= rect.left &&
+          x <= rect.right &&
+          y >= rect.top &&
+          y <= rect.bottom &&
+          this.acceptsDropZone(id, name)
+          ? [
+              {
+                zone,
+                distance: Math.hypot(
+                  x - (rect.left + rect.width / 2),
+                  y - (rect.top + rect.height / 2),
+                ),
+              },
+            ]
+          : [];
+      },
     );
-    let nearest:
-      | { card: HTMLButtonElement; index: number; distance: number; after: boolean }
-      | undefined;
-    cards.forEach((card, index) => {
-      const rect = card.getBoundingClientRect();
-      const center = rect.left + rect.width / 2;
-      const distance = Math.hypot(x - center, y - (rect.top + rect.height / 2));
-      if (!nearest || distance < nearest.distance)
-        nearest = { card, index, distance, after: x >= center };
-    });
-    if (!nearest) return;
-    drag.marker = nearest.card;
-    drag.destination = nearest.index + Number(nearest.after);
-    nearest.card.setAttribute("data-drop-side", nearest.after ? "after" : "before");
+    const zone = zones.sort((a, b) => a.distance - b.distance)[0]?.zone;
+    if (!zone?.dataset.dropZone) return;
+    drag.zone = zone;
+    drag.dropZone = zone.dataset.dropZone;
+    zone.setAttribute("data-drop-active", "");
   }
 
   pointerUp = (event: PointerEvent): void => {
@@ -144,9 +196,10 @@ export class HandDrag {
     if (!drag || event.pointerId !== drag.pointerId) return;
     if (drag.preview) this.position(event.clientX, event.clientY);
     const destination = drag.destination;
-    const id = drag.source.dataset.cardId;
+    const dropZone = drag.dropZone;
+    const id = drag.source.dataset.dragId ?? drag.source.dataset.cardId;
     if (drag.preview && id) {
-      this.release(false, destination);
+      this.release(false, destination, dropZone);
       return;
     }
     const tapped =
@@ -175,14 +228,14 @@ export class HandDrag {
     this.clear(true);
   };
 
-  private release(releaseCapture: boolean, destination?: number): void {
+  private release(releaseCapture: boolean, destination?: number, dropZone?: string): void {
     const drag = this.drag;
     if (!drag) return;
     const preview = drag.preview;
-    const id = drag.source.dataset.cardId;
+    const id = drag.source.dataset.dragId ?? drag.source.dataset.cardId;
     drag.preview = undefined;
     this.clear(releaseCapture);
-    if (preview && id) this.drop(id, destination, preview);
+    if (preview && id) this.drop(id, destination, preview, dropZone);
     else preview?.remove();
   }
 
@@ -193,8 +246,9 @@ export class HandDrag {
     if (drag.frame !== undefined) cancelAnimationFrame(drag.frame);
     drag.preview?.remove();
     drag.marker?.removeAttribute("data-drop-side");
+    drag.zone?.removeAttribute("data-drop-active");
     drag.source.removeAttribute("data-drag-source");
-    drag.hand.removeAttribute("data-dragging");
+    drag.hand?.removeAttribute("data-dragging");
     if (releaseCapture && drag.source.hasPointerCapture(drag.pointerId))
       drag.source.releasePointerCapture(drag.pointerId);
     window.removeEventListener("blur", this.cancel);

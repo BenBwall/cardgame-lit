@@ -166,6 +166,9 @@ export const cardTableStyles = css`
   .back:disabled {
     font-size: 0.875rem;
   }
+  .back-mark {
+    visibility: var(--card-back-mark-visibility, visible);
+  }
   :host([random-backs]) .back {
     background-image: var(--card-random-back-image, var(--card-back-image));
   }

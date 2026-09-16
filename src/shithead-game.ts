@@ -77,6 +77,7 @@ export class ShitheadGame extends LitElement {
   private saveFailed = false;
   private previewPile: "pile" | "burned" | null = null;
   private previewCloseTimer?: ReturnType<typeof setTimeout>;
+  private pilePreviewBlockedUntil = 0;
   private selected: string[] = [];
   private swapHand = "";
   private selecting = false;
@@ -103,9 +104,12 @@ export class ShitheadGame extends LitElement {
     (card) => cardBackStyle(card, this.backAssignments),
   );
   private handSizeMotion = new HandSizeMotion(() => this.renderRoot);
-  private handDrag = new HandDrag((id, destination, preview) => {
-    void this.reorder(id, destination, preview);
-  });
+  private handDrag = new HandDrag(
+    (id, destination, preview, dropZone) => {
+      this.dropCard(id, destination, preview, dropZone);
+    },
+    (id, dropZone) => this.canDropCard(id, dropZone),
+  );
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -241,14 +245,14 @@ export class ShitheadGame extends LitElement {
       backAssignments: this.backAssignments,
     });
   };
-  private async commit(next: ShitheadState): Promise<void> {
+  private async commit(next: ShitheadState, preview?: HTMLElement): Promise<void> {
     if (!this.game || next === this.game) return;
     const old = this.game,
       token = ++this.transition;
     clearTimeout(this.computerTimer);
     this.computerTimer = undefined;
     this.handDrag.dispose();
-    const before = this.motion.capture();
+    const before = this.motion.capture(preview);
     this.game = next;
     this.handOrder = [...this.handState().handOrder];
     this.selected = [];
@@ -357,6 +361,80 @@ export class ShitheadGame extends LitElement {
       .querySelector<HTMLButtonElement>(`[data-card-id="${id}"]`)
       ?.focus({ preventScroll: true });
   }
+  private dragSource(
+    id: string,
+  ): { kind: "hand" | "faceUp" | "faceDown"; index: number; card: Card } | undefined {
+    if (!this.game) return undefined;
+    const player = this.game.players[0];
+    if (id.startsWith("faceDown:")) {
+      const position = Number(id.slice("faceDown:".length));
+      const hiddenId = shitheadSlots(player)[position]?.faceDown;
+      const index = player.faceDown.findIndex((card) => cardId(card) === hiddenId);
+      if (index >= 0) return { kind: "faceDown", index, card: player.faceDown[index] };
+      return undefined;
+    }
+    for (const kind of ["hand", "faceUp"] as const) {
+      const index = player[kind].findIndex((card) => cardId(card) === id);
+      if (index >= 0) return { kind, index, card: player[kind][index] };
+    }
+    return undefined;
+  }
+  private canDropCard(id: string, dropZone: string): boolean {
+    if (!this.game || this.busy) return false;
+    const game = this.game,
+      source = this.dragSource(id);
+    if (!source) return false;
+    if (game.phase === "setup") {
+      if (source.kind === "hand" && dropZone.startsWith("faceUp:"))
+        return !!this.dragSource(dropZone.slice("faceUp:".length));
+      if (source.kind === "faceUp" && dropZone.startsWith("hand:"))
+        return !!this.dragSource(dropZone.slice("hand:".length));
+      return false;
+    }
+    return (
+      dropZone === "pile" &&
+      game.phase === "playing" &&
+      game.turn === 0 &&
+      shitheadSource(game.players[0]) === source.kind &&
+      (source.kind === "faceDown" || canPlayShithead(source.card, game.pile))
+    );
+  }
+  private dropCard(
+    id: string,
+    destination: number | undefined,
+    preview: HTMLElement,
+    dropZone: string | undefined,
+  ): void {
+    this.previewPile = null;
+    this.pilePreviewBlockedUntil = performance.now() + 300;
+    const game = this.game,
+      source = this.dragSource(id);
+    if (!game || !source || this.busy) {
+      preview.remove();
+      return;
+    }
+    if (!dropZone && source.kind === "hand") {
+      void this.reorder(id, destination, preview);
+      return;
+    }
+    if (dropZone && this.canDropCard(id, dropZone)) {
+      if (game.phase === "setup") {
+        const handId = source.kind === "hand" ? id : dropZone.slice("hand:".length);
+        const upId = source.kind === "faceUp" ? id : dropZone.slice("faceUp:".length);
+        void this.commit(swapShithead(game, handId, upId), preview);
+        return;
+      }
+      const selected =
+        source.kind !== "faceDown" && this.selected.includes(cardId(source.card))
+          ? game.players[0][source.kind].flatMap((card, index) =>
+              this.selected.includes(cardId(card)) ? [index] : [],
+            )
+          : [source.index];
+      void this.commit(playShithead(game, 0, selected), preview);
+      return;
+    }
+    void this.reorder(id, undefined, preview);
+  }
   private reorderKey(event: KeyboardEvent): void {
     if (event.key === "Escape") {
       this.handDrag.cancel();
@@ -424,7 +502,7 @@ export class ShitheadGame extends LitElement {
   private pilePreview(kind: "pile" | "burned", cards: readonly Card[]) {
     if (this.previewPile !== kind) return nothing;
     return html`<div class="pile-preview" id=${`${kind}-preview`} role="tooltip">
-      <strong>${kind === "pile" ? "Play pile" : "Exile pile"} · ${cards.length}</strong>
+      <strong>${kind === "pile" ? "Play pile" : "Out pile"} · ${cards.length}</strong>
       ${
         cards.length
           ? html`<span class="preview-order">Top card first</span>
@@ -449,6 +527,7 @@ export class ShitheadGame extends LitElement {
     </div>`;
   }
   private openPilePreview(kind: "pile" | "burned"): void {
+    if (this.handDrag.active || performance.now() < this.pilePreviewBlockedUntil) return;
     clearTimeout(this.previewCloseTimer);
     this.previewPile = kind;
   }
@@ -477,7 +556,7 @@ export class ShitheadGame extends LitElement {
     return html`<span class="flight-flipper" aria-hidden="true"
       ><span class="card face flight-front" data-suit=${card.suit}>${faceContents(card)}</span
       ><span class="card back flight-back" style=${cardBackStyle(card, this.backAssignments)}
-        >✦</span
+        ><span class="back-mark">✦</span></span
       ></span
     >`;
   }
@@ -496,6 +575,8 @@ export class ShitheadGame extends LitElement {
       class="card card-shell"
       type="button"
       data-card-id=${kind === "hand" ? cardId(card) : nothing}
+      data-drag-id=${kind === "faceUp" && (setup || playable) ? cardId(card) : nothing}
+      data-drop-zone=${setup ? `${kind}:${cardId(card)}` : nothing}
       data-board-key=${this.motion.key(card)}
       data-rest-angle=${angle}
       style=${`--card-angle:${angle}deg`}
@@ -529,13 +610,15 @@ export class ShitheadGame extends LitElement {
                     type="button"
                     data-concealed="true"
                     data-board-key=${this.motion.key(down)}
+                    data-drag-id=${game.phase === "playing" && game.turn === 0 && shitheadSource(player) === "faceDown" ? `faceDown:${position}` : nothing}
                     aria-label=${`Reveal face-down card ${position + 1}`}
                     ?disabled=${this.busy || game.phase !== "playing" || game.turn !== 0 || shitheadSource(player) !== "faceDown"}
-                    @click=${() => {
+                    @click=${(event: MouseEvent) => {
+                      if (this.handDrag.consumeClick(event)) return;
                       void this.commit(playShithead(game, 0, [player.faceDown.indexOf(down)]));
                     }}
                   >
-                    <span aria-hidden="true">✦</span>
+                    <span class="back-mark" aria-hidden="true">✦</span>
                   </button>`
                 : html`<div
                     class="card back lower-card"
@@ -545,7 +628,7 @@ export class ShitheadGame extends LitElement {
                     aria-label="Computer face-down card"
                     role="img"
                   >
-                    ✦
+                    <span class="back-mark" aria-hidden="true">✦</span>
                   </div>`
               : nothing
           }
@@ -701,7 +784,21 @@ export class ShitheadGame extends LitElement {
               </div>`
             : nothing
         }
-        <div class="board" aria-label="Card table">
+        <div
+          class="board"
+          aria-label="Card table"
+          @pointerdown=${(event: PointerEvent) => {
+            if (!this.busy) {
+              this.previewPile = null;
+              this.motion.finish();
+              this.handDrag.pointerDown(event);
+            }
+          }}
+          @pointermove=${this.handDrag.pointerMove}
+          @pointerup=${this.handDrag.pointerUp}
+          @pointercancel=${this.handDrag.pointerCancel}
+          @lostpointercapture=${this.handDrag.pointerCancel}
+        >
           <div class="seat" data-active=${game.phase === "playing" && game.turn === 1}>
             <span class="turn-dot" aria-hidden="true"></span><strong>Computer</strong
             ><span class="count">${opponent.hand.length} cards</span>
@@ -712,7 +809,7 @@ export class ShitheadGame extends LitElement {
             aria-label=${`Computer hand: ${opponent.hand.length} hidden cards`}
             style=${`--opponent-spread:${Math.min(180, Math.max(0, opponent.hand.length - 1) * 22)}px`}
           >
-            ${opponent.hand.map((card, index) => html`<div class="card back" aria-hidden="true" data-concealed="true" data-board-key=${this.motion.key(card)} style=${`${cardBackStyle(card, this.backAssignments)}--opponent-x:${opponent.hand.length > 1 ? index / (opponent.hand.length - 1) : 0.5};--opponent-angle:${opponent.hand.length > 1 ? ((index / (opponent.hand.length - 1)) * 2 - 1) * 12 : 0}deg`}>✦</div>`)}
+            ${opponent.hand.map((card, index) => html`<div class="card back" aria-hidden="true" data-concealed="true" data-board-key=${this.motion.key(card)} style=${`${cardBackStyle(card, this.backAssignments)}--opponent-x:${opponent.hand.length > 1 ? index / (opponent.hand.length - 1) : 0.5};--opponent-angle:${opponent.hand.length > 1 ? ((index / (opponent.hand.length - 1)) * 2 - 1) * 12 : 0}deg`}><span class="back-mark">✦</span></div>`)}
           </div>
           <div class="opponent-table">${this.tableCards(1)}</div>
           <div class="center-piles">
@@ -726,7 +823,7 @@ export class ShitheadGame extends LitElement {
                 role="img"
                 data-empty=${!game.stock.length}
               >
-                ${game.stock.length ? html`<span aria-hidden="true">✦</span>` : nothing}
+                ${game.stock.length ? html`<span class="back-mark" aria-hidden="true">✦</span>` : nothing}
               </div>
               <span>Stock <b>${game.stock.length}</b></span>
             </div>
@@ -750,6 +847,7 @@ export class ShitheadGame extends LitElement {
                 class="pile-base card card-shell pickup"
                 type="button"
                 data-board-zone="pile"
+                data-drop-zone="pile"
                 aria-label="Pick up pile"
                 ?disabled=${this.busy || !canPickupShithead(game, 0)}
                 @click=${() => {
@@ -766,7 +864,7 @@ export class ShitheadGame extends LitElement {
               class="board-pile out-pile inspectable-pile"
               tabindex="0"
               role="group"
-              aria-label="Exile pile contents"
+              aria-label="Out pile contents"
               aria-describedby=${this.previewPile === "burned" ? "burned-preview" : nothing}
               @pointerenter=${() => {
                 this.openPilePreview("burned");
@@ -852,11 +950,13 @@ export class ShitheadGame extends LitElement {
           <div class="hand-content">
             <ul
               class="hand"
+              data-drag-hand
               data-layout=${this.handLayout}
               style=${fan ? `height:${fan.height}px` : ""}
               aria-label="Your hand"
               @pointerdown=${(event: PointerEvent) => {
                 if (!this.busy) {
+                  this.previewPile = null;
                   this.motion.finish();
                   this.handDrag.pointerDown(event);
                 }
@@ -877,10 +977,11 @@ export class ShitheadGame extends LitElement {
           <p>
             Click a single card to play it. Clicking a card with matches selects it so you can add
             more. Press Play selected to play them together, or Cancel to keep your cards. Select
-            all chooses a matching set without playing it. Drag to arrange your hand, or use Alt +
-            Left/Right and Alt + Home/End. Choose Select matching cards, or Shift-click, to play a
-            matching set. During setup, choose a hand card and then a table card to swap. Click the
-            pile to pick it up.
+            all chooses a matching set without playing it. Drag a playable card to the pile, or drag
+            within your hand to arrange it. You can also use Alt + Left/Right and Alt + Home/End.
+            Choose Select matching cards, or Shift-click, to play a matching set. During setup, drag
+            between a hand card and a face-up table card to swap them, or choose both cards. Click
+            the pile to pick it up.
           </p>
           <p>
             Play equal or higher ranks; aces are high. A 2 resets the rank, a 10 burns the pile, and
@@ -1018,6 +1119,21 @@ export class ShitheadGame extends LitElement {
       }
       .upper-card .card {
         box-shadow: 0 2px 5px #0002;
+      }
+      .your-table button[data-drag-id] {
+        touch-action: none;
+        user-select: none;
+        cursor: grab;
+      }
+      [data-drop-zone][data-drop-active] {
+        outline: 3px solid var(--color-primary, #386541);
+        outline-offset: 5px;
+        border-radius: 0.5rem;
+      }
+      :host .drag-preview {
+        position: fixed;
+        top: 0;
+        left: 0;
       }
       .lower-card:disabled {
         opacity: 1;

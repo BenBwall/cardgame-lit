@@ -31,7 +31,7 @@ test("pile previews show all public cards in order without playing or revealing 
     (node as unknown as { game: ShitheadState }).game = state;
   }, state);
   const pile = game.getByRole("group", { name: "Play pile contents", exact: true });
-  const exile = game.getByRole("group", { name: "Exile pile contents", exact: true });
+  const out = game.getByRole("group", { name: "Out pile contents", exact: true });
   await expect(game.getByRole("button", { name: "Pick up pile", exact: true })).toBeDisabled();
   await pile.hover();
   const preview = game.getByRole("tooltip");
@@ -45,7 +45,7 @@ test("pile previews show all public cards in order without playing or revealing 
   await expect(preview).toBeVisible();
   await game.getByRole("heading", { name: "Shithead", exact: true }).hover();
   await expect(preview).toHaveCount(0);
-  await exile.focus();
+  await out.focus();
   await expect(preview.locator("li")).toHaveCount(state.burned.length);
   expect(
     await preview
@@ -61,7 +61,7 @@ test("pile previews show all public cards in order without playing or revealing 
     await page.emulateMedia({ colorScheme: theme });
     await page.setViewportSize({ width: 320, height: 900 });
     await game.getByRole("heading", { name: "Shithead", exact: true }).hover();
-    await exile.hover();
+    await out.hover();
     const rect = await preview.boundingBox();
     expect(rect!.x).toBeGreaterThanOrEqual(0);
     expect(rect!.x + rect!.width).toBeLessThanOrEqual(320);
@@ -72,7 +72,7 @@ test("pile previews show all public cards in order without playing or revealing 
 
 test("empty piles have previews and focusing or hovering never picks them up", async ({ page }) => {
   const game = page.locator("shithead-game");
-  for (const name of ["Play pile contents", "Exile pile contents"]) {
+  for (const name of ["Play pile contents", "Out pile contents"]) {
     await game.getByRole("group", { name, exact: true }).focus();
     await expect(game.getByRole("tooltip")).toHaveText(/Empty pile/);
     await page.keyboard.press("Escape");

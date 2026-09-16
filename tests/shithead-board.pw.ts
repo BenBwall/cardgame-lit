@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { type ShitheadState, DEFAULT_SHITHEAD_RULES } from "../src/shithead-state.js";
 
 const fixture = (): ShitheadState => ({
@@ -42,6 +42,17 @@ const setState = async (page: Page, state: ShitheadState) => {
   await game(page).evaluate((node, state) => {
     (node as unknown as { game: ShitheadState }).game = state;
   }, state);
+};
+const drag = async (page: Page, source: Locator, target: Locator) => {
+  await source.scrollIntoViewIfNeeded();
+  const from = (await source.boundingBox())!;
+  const to = (await target.boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
+  await expect(game(page).locator(".drag-preview")).toHaveCount(1);
+  await expect(target).toHaveAttribute("data-drop-active", "");
+  await page.mouse.up();
 };
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 1500 });
@@ -93,6 +104,82 @@ test("hand shares fan/grid layout, sorting, keyboard and mouse reordering with f
   expect(
     await game(page).evaluate((node) => (node as unknown as { game: ShitheadState }).game.phase),
   ).toBe("setup");
+});
+
+test("cards drag to the pile and setup cards drag between the hand and table", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const state = fixture();
+  await setState(page, { ...state, phase: "setup" });
+  await drag(
+    page,
+    game(page).getByRole("button", { name: "Swap 2 of Clubs", exact: true }),
+    game(page).getByRole("button", { name: "Swap 10 of Hearts", exact: true }),
+  );
+  await expect
+    .poll(() =>
+      game(page).evaluate((node) => {
+        const state = (node as unknown as { game: ShitheadState }).game;
+        return [state.players[0].hand.map((card) => card.rank), state.players[0].faceUp[0].rank];
+      }),
+    )
+    .toEqual([["10", "7", "9"], "2"]);
+  await drag(
+    page,
+    game(page).locator(".your-table").getByRole("button", { name: "Swap 2 of Clubs", exact: true }),
+    game(page).locator(".hand").getByRole("button", { name: "Swap 7 of Clubs", exact: true }),
+  );
+  await expect
+    .poll(() =>
+      game(page).evaluate((node) => {
+        const state = (node as unknown as { game: ShitheadState }).game;
+        return [state.players[0].hand.map((card) => card.rank), state.players[0].faceUp[0].rank];
+      }),
+    )
+    .toEqual([["10", "2", "9"], "7"]);
+
+  const pile = game(page).getByRole("button", { name: "Pick up pile", exact: true });
+  await setState(page, state);
+  await drag(page, game(page).getByRole("button", { name: "Play 2 of Clubs", exact: true }), pile);
+  await expect(game(page).getByRole("status")).toContainText("You played 2 of Clubs");
+  await expect
+    .poll(() =>
+      game(page).evaluate(
+        (node) => (node as unknown as { game: ShitheadState }).game.pile.at(-1)?.rank,
+      ),
+    )
+    .toBe("2");
+  await idle(page);
+
+  await setState(page, {
+    ...state,
+    stock: [],
+    players: [{ ...state.players[0], hand: [] }, state.players[1]],
+  });
+  await drag(
+    page,
+    game(page).getByRole("button", { name: "Play 10 of Hearts", exact: true }),
+    pile,
+  );
+  await expect
+    .poll(() =>
+      game(page).evaluate(
+        (node) => (node as unknown as { game: ShitheadState }).game.burned.length,
+      ),
+    )
+    .toBe(2);
+  await idle(page);
+
+  await setState(page, {
+    ...state,
+    stock: [],
+    players: [{ hand: [], faceUp: [], faceDown: state.players[0].faceDown }, state.players[1]],
+  });
+  await drag(
+    page,
+    game(page).getByRole("button", { name: "Reveal face-down card 1", exact: true }),
+    pile,
+  );
+  await expect(game(page).getByRole("status")).toContainText("picked up 2 cards");
 });
 
 test("click-to-play flies to pile and refills from stock with the chosen flip direction", async ({

@@ -93,9 +93,11 @@ export function applyArtwork(host: HTMLElement, art: CardArtwork): void {
   if (back) {
     host.style.setProperty("--card-back-image", `url("${back}")`);
     host.style.setProperty("--card-back-ink", "transparent");
+    host.style.setProperty("--card-back-mark-visibility", "hidden");
   } else {
     host.style.removeProperty("--card-back-image");
     host.style.removeProperty("--card-back-ink");
+    host.style.removeProperty("--card-back-mark-visibility");
   }
   host.style.setProperty("--card-art-rendering", art.faces === "kenney" ? "pixelated" : "auto");
 }
